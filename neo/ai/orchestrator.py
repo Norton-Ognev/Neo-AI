@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import re
 import json
@@ -242,11 +243,17 @@ def _date_for_day_of_month(day: int, now: datetime) -> datetime.date | None:
 
 def meridiem_from_reply(text: str) -> str | None:
     normalized = _normalize_hour_words(text.casefold().replace("ё", "е"))
-    if re.search(r"\b(?:утра|утром|утро)\b", normalized):
+    if re.search(r"\b(?:утра|утром|утро|утренн\w*|до\s+обеда|спозаранку)\b", normalized):
         return "morning"
-    if re.search(r"\b(?:вечера|вечером|вечер|дня|днем)\b", normalized):
+    if re.search(
+        r"\b(?:вечера|вечером|вечер|вечерн\w*|"
+        r"после\s+обеда|после\s+полудня)\b",
+        normalized,
+    ):
         return "afternoon"
-    if re.search(r"\b(?:ночи|ночью|ночь)\b", normalized):
+    if re.search(r"\b(?:дня|днем|дневн\w*|пополудни|в\s+обед)\b", normalized):
+        return "afternoon"
+    if re.search(r"\b(?:ночи|ночью|ночь|ночн\w*|за\s+полночь)\b", normalized):
         return "night"
     return None
 
@@ -933,6 +940,41 @@ def process(
             except ValueError:
                 pass
 
+    # Мы спросили "утра или вечера?", но ответ не распознали как meridiem.
+    # Не зовём LLM — он не видит истории диалога, и получится "Уточните детали".
+    if (
+            current_intent is None
+            and previous_intent
+            and context_flags["awaiting_meridiem"]
+            and not context_flags["awaiting_date"]
+            and not context_flags["awaiting_time"]
+    ):
+        previous_dt = None
+        if previous_intent.datetime_iso:
+            try:
+                previous_dt = datetime.fromisoformat(
+                    previous_intent.datetime_iso.replace("Z", "+00:00")
+                )
+            except ValueError:
+                previous_dt = None
+        if previous_dt is not None:
+            hour = previous_dt.hour
+            question = (
+                "Не расслышал: 12 дня или 12 ночи?"
+                if hour == 12
+                else f"Не расслышал: {hour} — это утро или вечер?"
+            )
+            context_manager.save_intent(
+                previous_intent,
+                session_id,
+                awaiting_meridiem=True,
+            )
+            return Intent(
+                action="clarify",
+                content=previous_intent.content,
+                datetime_iso=previous_intent.datetime_iso,
+                clarify_question=question,
+            )
     # If we asked for a date after the user already supplied the event and time,
     # combine a date-only answer with the remembered clock time.
     if current_intent is None and previous_intent and previous_intent.action in {"create_task", "create_meeting"}:
@@ -1201,7 +1243,23 @@ def process(
         )
 
         if not current_intent.clarify_question:
-            current_intent.clarify_question = "Уточните, пожалуйста, оставшиеся детали."
+            if current_intent.content and not current_intent.datetime_iso:
+                current_intent.clarify_question = (
+                    f"На какую дату и время записать «{current_intent.content}»?"
+                )
+            elif current_intent.datetime_iso and not current_intent.content:
+                current_intent.clarify_question = (
+                    "Что именно нужно запланировать?"
+                )
+            elif previous_intent and previous_intent.content:
+                current_intent.clarify_question = (
+                    f"Уточните, пожалуйста, время для события "
+                    f"«{previous_intent.content}»."
+                )
+            else:
+                current_intent.clarify_question = (
+                    "Уточните, пожалуйста, что и на какое время запланировать."
+                )
         context_manager.save_intent(
             intent_to_save,
             session_id,

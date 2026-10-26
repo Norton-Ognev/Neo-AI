@@ -12,6 +12,13 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+from .paths import configure_environment
+
+# Должно выполниться до импорта ollama / huggingface_hub / torch (они читают окружение при импорте).
+configure_environment()
+
+import subprocess
+
 import uvicorn
 import webview
 
@@ -58,18 +65,21 @@ sys.excepthook = _handle_main_exception
 threading.excepthook = _handle_thread_exception
 
 from .audio_bridge import AudioBridge
-from .ollama_runtime import ensure_ollama_running
+from .ollama_runtime import ensure_ollama_running, stop_ollama
+from .setup_runtime import is_setup_complete
 
 HOST = "127.0.0.1"
 PORT = 8000
 URL = f"http://{HOST}:{PORT}/"
 
 
-def main() -> None:
-    ensure_ollama_running()
+def _serve() -> None:
+    # Импортируем приложение явно: строковый путь "module:app" PyInstaller не видит.
+    from neo.backend.app.main import app as fastapi_app
+
     server = uvicorn.Server(
         uvicorn.Config(
-            "neo.backend.app.main:app",
+            fastapi_app,
             host=HOST,
             port=PORT,
             log_level="info",
@@ -110,6 +120,31 @@ def main() -> None:
     finally:
         server.should_exit = True
         server_thread.join(timeout=10)
+
+
+def _run_setup_process() -> bool:
+    """Первичная настройка идёт в отдельном процессе: pywebview нельзя запускать дважды в одном."""
+    if getattr(sys, "frozen", False):
+        command = [sys.executable, "--setup"]
+    else:
+        command = [sys.executable, "-m", "neo.desktop.launcher", "--setup"]
+    return subprocess.run(command).returncode == 0
+
+
+def main() -> None:
+    if "--setup" in sys.argv[1:]:
+        from .setup_window import run_setup_window
+
+        sys.exit(0 if run_setup_window() else 1)
+
+    if not is_setup_complete() and not _run_setup_process():
+        return  # пользователь закрыл окно настройки
+
+    ollama_process = ensure_ollama_running()
+    try:
+        _serve()
+    finally:
+        stop_ollama(ollama_process)  # иначе ollama.exe останется висеть после закрытия Neo
 
 
 if __name__ == "__main__":
