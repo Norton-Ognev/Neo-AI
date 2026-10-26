@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17151d">
+  <title>Neo — голосовой помощник</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container js-app-container">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Neo, главная">
+        <img src="frame/animation.svg" alt="">
+        <span><strong>NEO</strong><small>Голосовой помощник</small></span>
+      </a>
+      <nav class="top-actions" aria-label="Разделы">
+        <button class="top-action js-calendar-toggle" type="button" aria-expanded="false">Календарь</button>
+        <button class="top-action js-settings-toggle" type="button">Настройки</button>
+      </nav>
+    </header>
+
+    <main class="main-layout">
+      <section class="assistant-panel" aria-label="Диалог с Нео">
+        <div class="assistant-intro">
+          <span class="eyebrow">ВАШ ЛОКАЛЬНЫЙ АССИСТЕНТ</span>
+          <h1>Чем могу помочь?</h1>
+          <p>Скажите или напишите, что нужно запланировать.</p>
+        </div>
+        <div class="mic-control">
+          <button class="mic-button js-mic-button" type="button" aria-label="Начать запись">
+            <img src="frame/animation.svg" alt="">
+            <span class="mic-button-label">Нажмите, чтобы говорить</span>
+          </button>
+          <button class="operation-cancel js-operation-cancel" type="button"
+            aria-label="Отменить запись или обработку" title="Отменить" hidden>
+            <span aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="assistant-status js-assistant-status" role="status">Нео готов. Микрофон не запрашивает доступ у браузера.</div>
+        <button class="speech-stop js-speech-stop" type="button" hidden>Остановить голос · читать ответ</button>
+        <div class="assistant-reply js-assistant-reply" aria-live="polite"></div>
+        <form class="command-form js-command-form">
+          <input class="command-input js-command-input" type="text" maxlength="4000"
+            placeholder="Например: напомни завтра в 10 позвонить Ивану"
+            aria-label="Команда для Нео" autocomplete="off">
+          <button class="command-submit" type="submit">Отправить</button>
+        </form>
+      </section>
+
+      <section class="calendar-view js-calendar-view" aria-label="События месяца" hidden>
+        <header class="calendar-header">
+          <div>
+            <span class="eyebrow">ВАШ ПЛАН</span>
+            <h1 class="js-calendar-heading"></h1>
+          </div>
+          <div class="calendar-controls">
+            <button class="month-nav js-month-prev" type="button" aria-label="Предыдущий месяц">‹</button>
+            <button class="month-nav js-month-next" type="button" aria-label="Следующий месяц">›</button>
+            <button class="top-action js-calendar-close" type="button">На главную</button>
+          </div>
+        </header>
+        <div class="calendar-content">
+          <section class="month-section" aria-label="Календарная сетка">
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+            </div>
+            <div class="js-calendar-grid calendar-grid" role="grid" aria-label="Дни месяца"></div>
+          </section>
+          <section class="day-details" aria-labelledby="selected-day-heading">
+            <h2 class="js-selected-day-heading" id="selected-day-heading"></h2>
+            <p class="calendar-summary js-events-count"></p>
+            <div class="js-events-list event-list" aria-live="polite"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div class="event-editor-overlay js-event-editor-overlay" hidden>
+      <section class="event-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="event-editor-title">
+        <header class="settings-header">
+          <div><span class="eyebrow">КАЛЕНДАРЬ</span><h2 id="event-editor-title">Изменить событие</h2></div>
+          <button class="icon-button js-event-editor-close" type="button" aria-label="Закрыть редактор">×</button>
+        </header>
+        <form class="event-editor-form js-event-editor-form">
+          <label class="setting-field">
+            <span>Название</span>
+            <input class="js-editor-content" type="text" maxlength="2000" required>
+          </label>
+          <label class="setting-field">
+            <span>Дата и время</span>
+            <input class="js-editor-datetime" type="datetime-local">
+          </label>
+          <label class="setting-field">
+            <span>Тип</span>
+            <select class="js-editor-type">
+              <option value="reminder">Напоминание</option>
+              <option value="meeting">Встреча</option>
+              <option value="task">Задача</option>
+            </select>
+          </label>
+          <p class="settings-feedback js-editor-feedback" role="status"></p>
+          <div class="editor-actions">
+            <button class="top-action js-event-delete" type="button">Удалить</button>
+            <span></span>
+            <button class="top-action js-event-editor-cancel" type="button">Отмена</button>
+            <button class="command-submit js-event-editor-save" type="submit">Сохранить</button>
+          </div>
+        </form>
+        <div class="delete-confirm js-delete-confirm" hidden>
+          <p>Удалить это событие? Это действие нельзя отменить.</p>
+          <p class="settings-feedback js-delete-feedback" role="status"></p>
+          <div class="editor-actions">
+            <span></span>
+            <button class="top-action js-delete-cancel" type="button">Оставить</button>
+            <button class="command-submit js-delete-confirm-button" type="button">Удалить</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="settings-overlay js-settings-overlay" hidden>
+      <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <header class="settings-header">
+          <div><span class="eyebrow">ПАРАМЕТРЫ ПРИЛОЖЕНИЯ</span><h2 id="settings-title">Настройки</h2></div>
+          <button class="icon-button js-settings-close" type="button" aria-label="Закрыть настройки">×</button>
+        </header>
+        <div class="settings-content">
+          <nav class="settings-nav" aria-label="Настройки">
+            <button class="settings-tab is-active js-settings-tab" data-tab="voice" type="button" aria-current="page">Голос</button>
+            <button class="settings-tab js-settings-tab" data-tab="other" type="button">Прочее</button>
+          </nav>
+          <section class="voice-settings settings-tab-panel" data-panel="voice" aria-labelledby="voice-settings-title">
+            <h3 id="voice-settings-title">Устройства</h3>
+            <p class="settings-description">По умолчанию используются устройства, выбранные в Windows.</p>
+            <label class="setting-field">
+              <span>Микрофон</span>
+              <select class="js-input-device" aria-label="Микрофон"><option>Загрузка устройств…</option></select>
+            </label>
+            <label class="setting-field">
+              <span>Динамик</span>
+              <select class="js-output-device" aria-label="Динамик"><option>Загрузка устройств…</option></select>
+            </label>
+            <label class="setting-field volume-setting">
+              <span>Громкость ответа <output class="js-volume-value">100%</output></span>
+              <input class="js-volume-slider" type="range" min="0" max="100" value="100" aria-label="Громкость ответа">
+            </label>
+            <label class="autostart-row wake-word-setting" for="wake-word-toggle">
+              <span><strong>Фраза «Привет Нео»</strong><small>Слушать команду в фоне, даже когда окно свёрнуто</small></span>
+              <input class="autostart-switch js-wake-switch" id="wake-word-toggle" type="checkbox" role="switch" aria-label="Фоновое распознавание фразы Привет Нео" disabled>
+            </label>
+            <p class="settings-feedback js-wake-feedback" role="status">Загрузка состояния…</p>
+            <p class="settings-feedback js-settings-feedback" role="status"></p>
+          </section>
+          <section class="other-settings settings-tab-panel" data-panel="other" aria-labelledby="other-settings-title" hidden>
+            <h3 id="other-settings-title">Прочее</h3>
+            <p class="settings-description">Параметры запуска приложения.</p>
+            <label class="autostart-row" for="autostart-toggle">
+              <span><strong>Автозапуск</strong><small>Запускать Neo при входе в Windows</small></span>
+              <input class="autostart-switch js-autostart-switch" id="autostart-toggle" type="checkbox" role="switch" aria-label="Автозапуск Neo">
+            </label>
+            <p class="settings-feedback js-autostart-feedback" role="status"></p>
+          </section>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script type="module" src="script.js"></script>
+</body>
+</html>

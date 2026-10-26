@@ -1,0 +1,101 @@
+# ai/tests/test_cases.yaml
+
+# === 1. CREATE_TASK (6 шт) ===
+- user_text: "Напомни завтра в 15:00 позвонить Данилу по проекту"
+  expected:
+    action: "create_task"
+- user_text: "Добавь задачу купить молоко сегодня вечером"
+  expected:
+    action: "create_task"
+- user_text: "Надо помыть машину в субботу утром"
+  expected:
+    action: "create_task"
+- user_text: "Напомни мне сдать отчет 25 октября в 12:00"
+  expected:
+    action: "create_task"
+- user_text: "Добавь напоминание забрать посылку через 3 часа"
+  expected:
+    action: "create_task"
+- user_text: "Запиши задачу полить цветы завтра в 9 утра"
+  expected:
+    action: "create_task"
+
+# === 2. CREATE_MEETING (6 шт) ===
+- user_text: "Встреча с мамой в кафе в пятницу в 18:00"
+  expected:
+    action: "create_meeting"
+- user_text: "Созвон по проекту с командой через 2 часа"
+  expected:
+    action: "create_meeting"
+- user_text: "Запланируй свидание с Аней в воскресенье в 19:30"
+  expected:
+    action: "create_meeting"
+- user_text: "Назначь собеседование с кандидатом на понедельник в 11:00"
+  expected:
+    action: "create_meeting"
+- user_text: "Переговоры с клиентом в офисе завтра в два часа дня"
+  expected:
+    action: "create_meeting"
+- user_text: "У нас созвон с Данилом сегодня в 17:00"
+  expected:
+    action: "create_meeting"
+
+# === 3. LIST_EVENTS (6 шт) ===
+- user_text: "Что у меня запланировано на сегодня?"
+  expected:
+    action: "list_events"
+- user_text: "Покажи мои встречи на следующую неделю"
+  expected:
+    action: "list_events"
+- user_text: "Какие задачи висят на завтра?"
+  expected:
+    action: "list_events"
+- user_text: "Выведи список дел на эти выходные"
+  expected:
+    action: "list_events"
+- user_text: "Что мне нужно сделать в пятницу?"
+  expected:
+    action: "list_events"
+- user_text: "Покажи расписание планов на ближайшие три дня"
+  expected:
+    action: "list_events"
+
+# === 4. SEARCH_EVENTS (6 шт) ===
+- user_text: "Найди записи где упоминался пароль от роутера"
+  expected:
+    action: "search_events"
+- user_text: "Помнишь я записывал что-то про ремонт?"
+  expected:
+    action: "search_events"
+- user_text: "Найди в истории когда у Олега день рождения"
+  expected:
+    action: "search_events"
+- user_text: "Посмотри в старых задачах название автосервиса"
+  expected:
+    action: "search_events"
+- user_text: "Ищи по ключевому слову договор"
+  expected:
+    action: "search_events"
+- user_text: "Найди где я записывал адрес стоматологии"
+  expected:
+    action: "search_events"
+
+# === 5. CLARIFY (6 шт) ===
+- user_text: "Напомни сделать"
+  expected:
+    action: "clarify"
+- user_text: "Создай встречу"
+  expected:
+    action: "clarify"
+- user_text: "Добавь задачу на вечер"
+  expected:
+    action: "clarify"
+- user_text: "Запиши созвон с Олегом"
+  expected:
+    action: "clarify"
+- user_text: "Запланируй на завтра в 10:00"
+  expected:
+    action: "clarify"
+- user_text: "Напомни позвонить"
+  expected:
+    action: "clarify"

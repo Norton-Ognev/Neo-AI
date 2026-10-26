@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pydantic>=2
+ollama
+numpy
+torch>=2.0
+omegaconf
+faster-whisper
+av<19
+python-multipart
+pywebview
+sounddevice
+vosk>=0.3.45
+pywin32; sys_platform == 'win32'
