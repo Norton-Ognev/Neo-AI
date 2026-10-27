@@ -44,7 +44,7 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# Keep the catch-all mount last so API and health routes stay reachable.
+# Оставляем catch-all монтирование последним, чтобы маршруты API и health оставались доступными.
 frontend_dir = Path(__file__).resolve().parents[2] / "frontend"
 if frontend_dir.is_dir():
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

@@ -1,4 +1,4 @@
-"""Offline speech recognition for Russian audio using faster-whisper."""
+"""Офлайн-распознавание русской речи с использованием faster-whisper."""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ def _get_model():
             if _model is None:
                 from faster_whisper import WhisperModel
 
-                # The multilingual base model is a practical starting point for
-                # short commands and runs on CPU without a CUDA installation.
+                # Многоязычная базовая модель — практичная отправная точка для
+                # коротких команд; работает на CPU без установки CUDA.
                 _model = WhisperModel(
                     os.environ.get("NEO_WHISPER_MODEL", "small"),
                     device="cpu",
@@ -31,22 +31,22 @@ def _get_model():
 
 
 def transcribe_audio(audio_path: str) -> str:
-    """Transcribe a local audio file as Russian and return recognized text."""
+    """Распознаёт локальный аудиофайл как русскую речь и возвращает распознанный текст."""
     model = _get_model()
     options = {
         "language": "ru",
         "beam_size": 5,
         "temperature": 0.0,
         "condition_on_previous_text": False,
-        # Avoid initial_prompt here: Whisper can echo the prompt when the clip
-        # is quiet or contains very short speech, returning it as a transcript.
+        # Здесь избегаем initial_prompt: Whisper может повторить промпт, если клип
+        # тихий или содержит очень короткую речь, и вернуть его как транскрипт.
     }
     with _inference_lock:
         segments, _info = model.transcribe(audio_path, vad_filter=True, **options)
         text = " ".join(segment.text.strip() for segment in segments).strip()
 
-    # Very short commands or recordings clipped close to speech can be
-    # mistaken for silence by VAD. Retry the same audio without that filter.
+    # Очень короткие команды или записи, обрезанные вплотную к речи, могут
+    # быть приняты VAD за тишину. Повторяем тот же аудиофайл без этого фильтра.
     if not text:
         with _inference_lock:
             segments, _info = model.transcribe(audio_path, vad_filter=False, **options)
@@ -57,7 +57,7 @@ def transcribe_audio(audio_path: str) -> str:
 
 
 def transcribe_samples(samples) -> str:
-    """Recognize a float32 mono audio buffer sampled at 16 kHz."""
+    """Распознаёт монофонический аудиобуфер float32 с частотой дискретизации 16 кГц."""
     import numpy as np
 
     audio = np.asarray(samples, dtype=np.float32).reshape(-1)
@@ -78,7 +78,7 @@ def transcribe_samples(samples) -> str:
 
 
 def normalize_transcript(text: str) -> str:
-    """Correct known Russian ASR slips when the phrase is clearly a schedule command."""
+    """Исправляет известные ошибки русского ASR, когда фраза явно является командой расписания."""
     if not re.search(r"\b(?:запиши|запланируй|создай|добавь|поставь)\b", text, re.IGNORECASE):
         return text
     if not re.search(
@@ -98,8 +98,8 @@ def normalize_transcript(text: str) -> str:
     text = re.sub(r"\b(?:с\s+азвон|со\s+звон|с\s+озвон)\b", "созвон", text, flags=re.IGNORECASE)
     text = re.sub(r"\b(?:сазон|сазвон|созан)\b", "созвон", text, flags=re.IGNORECASE)
 
-    # Speech recognition can drop the preposition before a clock written as
-    # "17.00". Normalize it to the unambiguous form understood downstream.
+    # Распознавание речи может потерять предлог перед временем, записанным как
+    # «17.00». Приводим его к однозначной форме, понятной дальше по обработке.
     def normalize_clock(match: re.Match[str]) -> str:
         prefix = match.group("prefix") or "в "
         return f"{prefix}{match.group('hour')}:{match.group('minute')}"

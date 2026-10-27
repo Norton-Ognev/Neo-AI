@@ -1,4 +1,4 @@
-"""Windows audio device selection shared by the desktop UI and voice services."""
+"""Выбор аудиоустройств Windows, общий для десктопного UI и голосовых сервисов."""
 
 from __future__ import annotations
 

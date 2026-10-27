@@ -1,4 +1,4 @@
-"""In-process cancellation signals for active assistant requests."""
+"""Внутрипроцессные сигналы отмены для активных запросов к ассистенту."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from threading import Event, Lock
 
 
 class RequestCancelled(Exception):
-    """Raised when the user cancels an assistant request."""
+    """Возникает, когда пользователь отменяет запрос к ассистенту."""
 
 
 _lock = Lock()

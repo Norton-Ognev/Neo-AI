@@ -50,7 +50,7 @@ def handle_text(request: TextRequest) -> TextResponse:
                 speak_text(response.response_text)
                 response.speech_queued = True
             except Exception:
-                # Speech is an optional output channel; keep the text response usable.
+                # Речь — это опциональный канал вывода; сохраняем текстовый ответ пригодным к использованию.
                 logger.exception("Could not queue response for speech")
         _publish_wake_result(request, response)
         return response

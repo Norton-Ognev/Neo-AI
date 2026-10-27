@@ -25,7 +25,7 @@ _MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 @router.get("/test-ui", include_in_schema=False)
 def voice_test_ui() -> FileResponse:
-    """Serve a tiny same-origin page for testing the microphone in a browser."""
+    """Отдаёт небольшую страницу с того же origin для проверки микрофона в браузере."""
     return FileResponse(os.path.join(os.path.dirname(__file__), "voice_test.html"))
 
 
@@ -56,7 +56,7 @@ def voice_command(
     request_id: str | None = Form(default=None, max_length=100),
     speak: bool = Form(default=True),
 ) -> dict:
-    """Recognize uploaded speech and pass its transcript to the assistant."""
+    """Распознаёт загруженную речь и передаёт её транскрипт ассистенту."""
     suffix = os.path.splitext(audio.filename or "")[1].lower()
     if suffix not in {".wav", ".mp3", ".m4a", ".mp4", ".webm", ".ogg", ".flac"}:
         suffix = ".webm"

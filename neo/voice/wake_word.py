@@ -1,4 +1,4 @@
-"""Local, continuous Russian wake phrase listener for the desktop app."""
+"""Локальный непрерывный слушатель русской фразы активации для десктопного приложения."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ _COMMAND_MAX_SECONDS = 30.0
 
 
 class WakeWordListener:
-    """Listen on a native audio thread so recognition works while the UI is minimized."""
+    """Слушает в нативном аудиопотоке, чтобы распознавание работало при свёрнутом UI."""
 
     def __init__(self, on_update: Callable[[dict], None] | None = None) -> None:
         self._on_update = on_update
@@ -97,7 +97,7 @@ class WakeWordListener:
         return self.status()
 
     def finish_command(self) -> dict:
-        """Ask the active wake-word recording to finalize immediately."""
+        """Просит активную запись после фразы активации немедленно завершиться."""
         state = self.status()
         if not state["enabled"] or not state["awaiting_command"]:
             return {"requested": False, **state}
@@ -106,7 +106,7 @@ class WakeWordListener:
         return {"requested": True, **self.status()}
 
     def cancel_command(self) -> dict:
-        """Discard an utterance captured after the wake phrase without sending it."""
+        """Отбрасывает фразу, записанную после фразы активации, не отправляя её."""
         state = self.status()
         cancellable = state["awaiting_command"] or state["phase"] == "transcribing"
         if not state["enabled"] or not cancellable:
@@ -258,7 +258,7 @@ class WakeWordListener:
             return False
 
     def publish_api_response(self, command: str, response: dict) -> None:
-        """Refresh the desktop UI if the API finishes after its HTTP client timed out."""
+        """Обновляет десктопный UI, если API завершает обработку после таймаута HTTP-клиента."""
         state = self.status()
         if not state["enabled"] or state.get("last_transcript") != command:
             return

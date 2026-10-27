@@ -1,4 +1,4 @@
-"""Low-cost Russian wake phrase detector powered by Vosk."""
+"""Недорогой детектор русской фразы активации на основе Vosk."""
 
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ def _ensure_model(on_status=None) -> Path:
 
 
 def create_detector(sample_rate: int, on_status=None):
-    """Load Vosk and return its recognizer restricted to wake phrase variants."""
+    """Загружает Vosk и возвращает распознаватель, ограниченный вариантами фразы активации."""
     try:
         from vosk import Model, KaldiRecognizer, SetLogLevel
     except ImportError as exc:
@@ -111,7 +111,7 @@ def create_detector(sample_rate: int, on_status=None):
 
 
 def phrase_detected(text: str) -> bool:
-    """Check recognized or partial text for a Russian wake phrase variant."""
+    """Проверяет распознанный или частичный текст на наличие варианта русской фразы активации."""
     import re
 
     normalized = " ".join(text.lower().replace("ё", "е").split())

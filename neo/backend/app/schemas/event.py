@@ -3,9 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 EventType = Literal["task", "meeting", "reminder"]
-
 
 class EventCreate(BaseModel):
     event_type: EventType
@@ -22,7 +20,7 @@ class EventCreate(BaseModel):
 
 
 class EventUpdate(EventCreate):
-    """Complete editable fields for an existing event."""
+    """Заполняет редактируемые поля для существующего события."""
 
 
 class EventRead(BaseModel):

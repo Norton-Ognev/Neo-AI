@@ -1,4 +1,4 @@
-"""Start and inspect the local Ollama service used by Neo.
+"""Запускает и проверяет локальный сервис Ollama, используемый Neo.
 
 Отличия от прежней версии:
   * сначала ищется Ollama, встроенная в приложение (paths.find_bundled_ollama);
@@ -62,7 +62,7 @@ def _find_ollama() -> str | None:
 
 
 def ensure_ollama_running() -> subprocess.Popen | None:
-    """Connect to Ollama or launch its local daemon. Returns the process we own (or None)."""
+    """Подключается к Ollama или запускает её локальный демон. Возвращает процесс, которым владеем мы (или None)."""
     base_url = server_url()
     tags = read_tags(base_url)
     owned_process = None

@@ -35,6 +35,14 @@ Source: "..\dist\NeoAI\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 Source: "..\build\ollama\*"; DestDir: "{app}\ollama"; Flags: recursesubdirs ignoreversion
 #endif
 
+[Dirs]
+Name: "{app}\data";               Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{app}\data\ollama";        Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{app}\data\hf";            Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{app}\data\torch";         Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{app}\data\runtime";       Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{app}\data\logs";          Permissions: users-modify; Flags: uninsneveruninstall
+
 [Icons]
 Name: "{group}\Neo AI"; Filename: "{app}\NeoAI.exe"
 Name: "{autodesktop}\Neo AI"; Filename: "{app}\NeoAI.exe"; Tasks: desktopicon

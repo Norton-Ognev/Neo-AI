@@ -1,4 +1,4 @@
-"""SQLite connection and schema management for Neo."""
+"""Управление подключением к SQLite и схемой для Neo."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Iterator
 
 
 def get_database_path() -> Path:
-    """Return the writable per-user database path, or NEO_DB_PATH if configured."""
+    """Возвращает записываемый путь к базе данных для пользователя или NEO_DB_PATH, если он задан."""
     configured_path = os.getenv("NEO_DB_PATH")
     if configured_path:
         return Path(configured_path).expanduser().resolve()
@@ -19,13 +19,13 @@ def get_database_path() -> Path:
     if local_app_data:
         return Path(local_app_data) / "Neo" / "neo_database.db"
 
-    # Useful for development on platforms without the Windows LOCALAPPDATA variable.
+    # Полезно для разработки на платформах без переменной Windows LOCALAPPDATA.
     return Path(__file__).resolve().parents[2] / "data" / "neo_database.db"
 
 
 @contextmanager
 def get_connection() -> Iterator[sqlite3.Connection]:
-    """Open a short-lived SQLite connection and commit or roll back atomically."""
+    """Открывает короткоживущее подключение к SQLite и атомарно фиксирует или откатывает изменения."""
     database_path = get_database_path()
     database_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(database_path, timeout=10)
@@ -46,7 +46,7 @@ def get_connection() -> Iterator[sqlite3.Connection]:
 
 
 def initialize_database() -> None:
-    """Create the events table and indexes when the application starts."""
+    """Создаёт таблицу events и индексы при запуске приложения."""
     with get_connection() as connection:
         connection.execute(
             """

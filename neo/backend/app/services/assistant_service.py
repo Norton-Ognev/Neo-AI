@@ -42,7 +42,7 @@ def _add_months(value, months: int):
 
 
 def _date_only_reply(text: str, reference: datetime) -> datetime | None:
-    """Parse a date correction such as «мне нужно 31 число» in event context."""
+    """Разбирает уточнение даты, например «мне нужно 31 число», в контексте события."""
     folded = text.casefold().replace("ё", "е")
     if re.search(r"\b\d{1,2}(?:[:.]\d{2})\b|\b\d{1,2}\s*час(?:а|ов)?\b|\b(?:утра|дня|вечера|ночи)\b", folded):
         return None
@@ -112,11 +112,11 @@ def _spoken_datetime(value: str | None) -> str:
 
 
 class AssistantUnavailableError(RuntimeError):
-    """Raised when the orchestrator cannot reach or load the local model."""
+    """Возникает, когда оркестратор не может достучаться до локальной модели или загрузить её."""
 
 
 def process_text(request: TextRequest, cancellation_event=None) -> TextResponse:
-    """Classify a text command, execute its database action, and build a reply."""
+    """Классифицирует текстовую команду, выполняет соответствующее действие в базе данных и формирует ответ."""
     from .request_cancellation import raise_if_cancelled
 
     raise_if_cancelled(cancellation_event)
@@ -323,7 +323,7 @@ def _get_intent(text: str, session_id: str, cancellation_event=None):
 
 
 def _replacement_time_intent(text: str, pending: dict, session_id: str):
-    """Parse replacement date/time against the event being rescheduled."""
+    """Разбирает новую дату/время для события, которое переносится."""
     from neo.ai.orchestrator import parse_explicit_create_command
 
     prior = pending["intent"]
@@ -336,7 +336,7 @@ def _replacement_time_intent(text: str, pending: dict, session_id: str):
         candidate.content = prior.content
         return candidate
 
-    # A time-only answer keeps the original calendar date.
+    # Ответ, содержащий только время, сохраняет исходную календарную дату.
     time_match = re.search(
         r"(?<!\d)(\d{1,2})(?:[:.](\d{2}))?\s*(?:час(?:а|ов)?\s*"
         r"(?:утра|дня|вечера|ночи)?)?\b",

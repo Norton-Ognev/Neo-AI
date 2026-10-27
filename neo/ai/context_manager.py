@@ -49,7 +49,7 @@ def get_last_intent(session_id: str = "default") -> Intent | None:
 
 
 def get_context_flags(session_id: str = "default") -> dict:
-    """Return pending clarification state for a live conversation."""
+    """Возвращает состояние «ожидает уточнения» для текущего диалога."""
     session_data = _session_storage.get(session_id)
     if not session_data:
         return {

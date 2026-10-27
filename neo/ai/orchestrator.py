@@ -22,7 +22,6 @@ _MONTH_NUMBERS = {
 }
 _MONTH_WORDS_PATTERN = "|".join(_MONTH_NUMBERS)
 
-
 def _clean_created_title(title: str | None) -> str | None:
     if not title:
         return title
@@ -63,7 +62,6 @@ def _clean_created_title(title: str | None) -> str | None:
     title = re.sub(r"\s+", " ", title).strip(" ,.!?—-\t")
     return title or None
 
-
 def _normalize_hour_words(text: str) -> str:
     for word, number in _HOUR_WORDS.items():
         text = re.sub(
@@ -73,8 +71,6 @@ def _normalize_hour_words(text: str) -> str:
         )
         text = re.sub(rf"\b{word}(?=\s+час(?:а|ов)?\b)", str(number), text)
 
-    # Ответ на вопрос «во сколько?» часто приходит без предлога: «десять вечера».
-    # «дня» сюда намеренно не входит: «два дня» чаще означает срок, а не время.
     for word, number in _HOUR_WORDS.items():
         text = re.sub(
             rf"\b{word}(?=\s+(?:час(?:а|ов)?\s+)?(?:утра|утром|вечера|вечером|ночи|ночью)\b)",
@@ -99,7 +95,6 @@ def _normalize_hour_words(text: str) -> str:
     )
     return text
 
-
 def build_system_prompt(now: datetime) -> str:
     """Загружает шаблон промпта и подставляет текущий контекст времени."""
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -112,7 +107,6 @@ def build_system_prompt(now: datetime) -> str:
     now_iso = now.isoformat()
     context_str = f"{now_iso} ({day_name}, текущий год {now.year})"
     return prompt_template.replace("{{ now_iso }}", context_str)
-
 
 def parse_short_time(
     text: str, now: datetime, context_datetime_iso: str | None = None
@@ -138,7 +132,7 @@ def parse_short_time(
             if context_datetime_iso:
                 target_dt = datetime.fromisoformat(context_datetime_iso.replace("Z", "+00:00"))
             else:
-                # If no date was retained in context, preserve the old default.
+                # Если в контексте не сохранилась дата, сохраняем старое значение по умолчанию.
                 target_dt = now + timedelta(days=1)
             if "сегодня" in text_clean:
                 target_dt = now
@@ -149,9 +143,8 @@ def parse_short_time(
             ).isoformat()
     return None
 
-
 def has_explicit_clock_time(text: str) -> bool:
-    """Return true only when the user actually supplied a usable time of day."""
+    """Возвращайте true только, если пользователь действительно предоставил пригодное время суток."""
     normalized = _normalize_hour_words(text.casefold().replace("ё", "е"))
     if re.search(r"\b(?:полдень|полночь)\b", normalized):
         return True
@@ -183,7 +176,6 @@ def has_explicit_clock_time(text: str) -> bool:
     if re.search(r"\b\d{1,2}\s+час(?:а|ов)?\b", normalized):
         return True
     # Короткий ответ без предлога: «10 вечера», «6 утра», «10 часов вечера».
-    # Раньше такие ответы не считались временем, и вопрос «Во сколько?» повторялся бесконечно.
     for match in re.finditer(
         r"(?<![\d:.])(\d{1,2})(?:\s+час(?:а|ов)?)?\s+(утра|утром|вечера|вечером|ночи|ночью|дня|днем)\b",
         normalized,
@@ -196,9 +188,8 @@ def has_explicit_clock_time(text: str) -> bool:
         return True
     return False
 
-
 def ambiguous_clock_hour(text: str) -> int | None:
-    """Find a 1–12 hour that has no morning/day/evening/night qualifier."""
+    # Ищет значение в диапазоне от 1 до 12 часов, не сопровождающееся уточнением времени суток (утро/день/вечер/ночь).
     normalized = _normalize_hour_words(text.casefold().replace("ё", "е"))
     if re.search(r"\b(?:утра|утром|дня|днем|вечера|вечером|ночи|ночью)\b", normalized):
         return None
@@ -234,7 +225,6 @@ def ambiguous_clock_hour(text: str) -> int | None:
         return int(bare_match.group(1))
     return None
 
-
 def explicit_date_was_given(text: str) -> bool:
     normalized = _normalize_hour_words(text.casefold().replace("ё", "е"))
     return bool(re.search(
@@ -244,7 +234,6 @@ def explicit_date_was_given(text: str) -> bool:
         r"\d{1,2}(?:-?(?:го|е))?\s+числ\w*)\b",
         normalized,
     ))
-
 
 def _date_for_day_of_month(day: int, now: datetime) -> datetime.date | None:
     if not 1 <= day <= 31:
@@ -260,7 +249,6 @@ def _date_for_day_of_month(day: int, now: datetime) -> datetime.date | None:
             year += 1
             month = 1
     return None
-
 
 def meridiem_from_reply(text: str) -> str | None:
     normalized = _normalize_hour_words(text.casefold().replace("ё", "е"))
@@ -278,7 +266,6 @@ def meridiem_from_reply(text: str) -> str | None:
         return "night"
     return None
 
-
 def resolve_ambiguous_hour(hour: int, meridiem: str) -> int:
     if meridiem == "morning":
         return 0 if hour == 12 else hour
@@ -286,9 +273,8 @@ def resolve_ambiguous_hour(hour: int, meridiem: str) -> int:
         return 12 if hour == 12 else (hour + 12 if hour < 12 else hour)
     return 0 if hour == 12 else hour
 
-
 def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
-    """Extract a reminder's message separately from its scheduled date and time."""
+    """Отделяет текст напоминания от запланированных даты и времени."""
     normalized = _normalize_hour_words(text.casefold().replace("ё", "е"))
     reminder_verb = re.search(r"\b(?:напомин\w*|напомн\w*)\b", normalized)
     if not reminder_verb:
@@ -349,9 +335,9 @@ def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
         )
         if schedule_day is None and body_intro and body_intro.group(1) not in {"что", "о том, что"}:
             schedule_day = day_matches[0] if day_matches else None
-        # ASR often inserts an extra "о том, что" before the day. If no other
-        # reminder date was found, accept the explicit calendar date anywhere
-        # in the utterance and remove it from the reminder text below.
+        # Система автоматического распознавания речи (ASR) часто вставляет лишнюю фразу «о том, что» перед указанием дня.
+        # Если других дат для напоминания не обнаружено,
+        # следует принять явно указанную календарную дату (где бы она ни встретилась в высказывании) и удалить её из текста напоминания.
         if schedule_day is None:
             numbered_date = numbered_date or (numbered_date_matches[0] if numbered_date_matches else None)
             named_date = named_date or (named_date_matches[0] if named_date_matches else None)
@@ -440,8 +426,8 @@ def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
         body,
         flags=re.IGNORECASE,
     )
-    # Schedule fragments can precede the content marker ("в 15:30 о том, что...").
-    # Remove the marker and its filler only after date/time tokens are gone.
+    # Фрагменты, относящиеся к расписанию, могут предшествовать маркеру контента (например, «в 15:30 о том, что...»).
+    # Удаляет маркер и сопутствующие ему слова только после того, как будут убраны токены, обозначающие дату или время.
     body = re.sub(r"\b(?:у меня|мне)\s+(?:будет|есть)\b", " ", body, flags=re.IGNORECASE)
     for _ in range(3):
         body = re.sub(
@@ -506,9 +492,8 @@ def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
         clarify_question=question,
     )
 
-
 def looks_like_time_only_reply(text: str) -> bool:
-    """Detect a time answer with conversational filler but no event description."""
+    # Выявляет ответ, содержащий указание времени и слова-заполнители, но не включающий описание события.
     normalized = text.casefold().replace("ё", "е")
     if not has_explicit_clock_time(normalized):
         return False
@@ -533,9 +518,8 @@ def looks_like_time_only_reply(text: str) -> bool:
     remainder = re.sub(r"[\W_]+", " ", remainder, flags=re.UNICODE).strip()
     return not remainder
 
-
 def parse_explicit_create_command(text: str, now: datetime) -> Intent | None:
-    """Safely recover an explicit create command when the model asks unnecessarily."""
+    """Безопасно восстанавливает явную команду создания, когда модель запрашивает её без необходимости."""
     text = re.sub(
         r"^\s*на\s+какую\s+дату\s+и\s+время\s+записать\s+.+?\b(надо|нужно|хочу)\b",
         r"\1",
@@ -559,8 +543,8 @@ def parse_explicit_create_command(text: str, now: datetime) -> Intent | None:
         rf"\b({relative_day_pattern})\b",
         normalized,
     ))
-    # If the speaker corrects themselves ("в 15... нет, на 16"), the last
-    # explicit clock time is the intended one.
+    # Если говорящий исправляет сам себя («в 15... нет, на 16»), последнее
+    # явно указанное время считается намеренным.
     time_matches = list(re.finditer(
         r"\b(?:(?:в|на)\s*(\d{1,2})(?:[:.](\d{2}))?"
         r"(?:\s*час(?:а|ов)?(?:\s+(?:утра|дня|вечера|ночи))?)?"
@@ -577,8 +561,8 @@ def parse_explicit_create_command(text: str, now: datetime) -> Intent | None:
             normalized[match.end():],
         )
     ]
-    # Multiple alternatives are not automatically corrections. Let the model
-    # ask when the speaker did not signal which date/time replaces the other.
+    # Несколько вариантов — это не автоматические исправления. Пусть модель уточняет,
+    # если говорящий не указал, какая дата/время заменяет другую.
     has_correction = bool(re.search(
         r"\b(?:нет|лучше|давай|перенеси|вместо|точнее|поправка|"
         r"а\s+не|исправ(?:ь|ляю|ление))\b|\bс\s+\d{1,2}\s+на\s+\d{1,2}\b",
@@ -622,9 +606,9 @@ def parse_explicit_create_command(text: str, now: datetime) -> Intent | None:
     else:
         return None
 
-    # Remove a greeting/address first (it may end a sentence), then use the
-    # initial request for the event title. Later sentences often contain only
-    # corrections and can also contain ASR noise.
+    # Сначала убираем приветствие/обращение (оно может заканчивать предложение),
+    # затем используем первоначальный запрос для названия события. Последующие
+    # предложения часто содержат только исправления и могут содержать шум ASR.
     content_source = re.sub(
         r"^\s*(?:привет\w*|здравствуй\w*)\b[\s,!?.—-]*"
         r"(?:(?:неос?|нева|нео|нелл?)\b[\s,!?.—-]*)?",
@@ -699,8 +683,8 @@ def parse_explicit_create_command(text: str, now: datetime) -> Intent | None:
             ),
         )
 
-    # Even without a date/time, an explicit meeting remains a meeting and
-    # should be clarified deterministically rather than relabeled by the LLM.
+    # Даже без даты/времени явная встреча остаётся встречей и должна
+    # уточняться детерминированно, а не переименовываться LLM.
     if not day_matches and time_match is None:
         if action == "create_meeting":
             description = re.sub(r"^(?:встреча|созвон|переговоры)\s+", "", content, flags=re.IGNORECASE).strip()
@@ -814,9 +798,8 @@ def parse_explicit_create_command(text: str, now: datetime) -> Intent | None:
     )
     return Intent(action=action, content=content, datetime_iso=scheduled_at.isoformat())
 
-
 def parse_list_events_query(text: str, now: datetime) -> Intent | None:
-    """Recognize ordinary questions about the user's schedule without the LLM."""
+    """Распознаёт обычные вопросы о расписании пользователя без участия LLM."""
     normalized = text.casefold().replace("ё", "е")
     future_calls_lookup = bool(
         re.search(r"\b(?:найди|покажи|какие|список|все|есть\s+ли)\b", normalized)
@@ -830,8 +813,9 @@ def parse_list_events_query(text: str, now: datetime) -> Intent | None:
             datetime_iso=now.isoformat(),
         )
 
-    # A keyword question asks for matching saved titles across the calendar,
-    # even when speech recognition prefixes it with create-reminder wording.
+    # Вопрос по ключевому слову запрашивает совпадающие сохранённые названия
+    # по всему календарю, даже если распознавание речи добавляет в начало
+    # формулировку создания напоминания.
     walk_match = re.search(r"\bпрогулк\w*\b", normalized)
     is_keyword_lookup = bool(
         walk_match
@@ -841,7 +825,7 @@ def parse_list_events_query(text: str, now: datetime) -> Intent | None:
     if is_keyword_lookup:
         return Intent(action="search_events", search_query="прогулк")
 
-    # Do not let the broad conversational fallback steal explicit create commands.
+    # Не позволяем широкому разговорному фолбэку перехватывать явные команды создания.
     if re.search(r"\b(?:напомни|напомнить|запиши|запланируй|создай|добавь|поставь)\b", normalized):
         return None
     has_query_form = bool(re.search(
@@ -859,9 +843,9 @@ def parse_list_events_query(text: str, now: datetime) -> Intent | None:
         r"месяц\w*|год\w*|лет)\b",
         normalized,
     ))
-    # Speech recognition often mangles "есть ли у меня дела?" into forms like
-    # "что-то я сделал есть?". A date plus an existential question is enough
-    # to treat it as a schedule lookup, unless it was an explicit create command.
+    # Распознавание речи часто искажает «есть ли у меня дела?» в формы вроде
+    # «что-то я сделал есть?». Даты плюс экзистенциального вопроса достаточно,
+    # чтобы считать это запросом расписания, если это не была явная команда создания.
     conversational_lookup = (
         has_period
         and bool(re.search(r"\b(?:что-то|что-нибудь|какие-то|какой-то|есть\s+ли|есть|имеется)\b", normalized))
@@ -899,7 +883,6 @@ def parse_list_events_query(text: str, now: datetime) -> Intent | None:
 
     start = datetime.combine(target_date, datetime.min.time(), tzinfo=now.tzinfo)
     return Intent(action="list_events", datetime_iso=start.isoformat())
-
 
 def process(
     user_text: str,
@@ -1008,8 +991,8 @@ def process(
                 datetime_iso=previous_intent.datetime_iso,
                 clarify_question=question,
             )
-    # If we asked for a date after the user already supplied the event and time,
-    # combine a date-only answer with the remembered clock time.
+    # Если мы спросили дату после того, как пользователь уже указал событие и время,
+    # объединяем ответ только с датой и запомненное время.
     if current_intent is None and previous_intent and previous_intent.action in {"create_task", "create_meeting"}:
         try:
             previous_datetime = datetime.fromisoformat(

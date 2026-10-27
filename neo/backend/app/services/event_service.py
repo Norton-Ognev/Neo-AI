@@ -19,7 +19,7 @@ def _serialize_event(row: sqlite3.Row) -> dict:
 
 
 class EventService:
-    """Application-level access to event records."""
+    """Доступ к записям событий на уровне приложения."""
 
     @staticmethod
     def create(event: EventCreate) -> dict:
@@ -61,7 +61,7 @@ class EventService:
 
     @staticmethod
     def find_conflicts(datetime_iso: datetime, tolerance_seconds: int = 30) -> list[dict]:
-        """Find unfinished events scheduled within 30 seconds of this time."""
+        """Находит незавершённые события, запланированные в пределах 30 секунд от указанного времени."""
         with get_connection() as connection:
             rows = connection.execute(
                 """SELECT * FROM events
@@ -106,7 +106,7 @@ class EventService:
         terms = [term for term in query.strip().split() if term]
         if not terms:
             return []
-        # Require every word but allow them to occur in any order.
+        # Требуем присутствия каждого слова, но разрешаем им идти в любом порядке.
         where = " AND ".join(
             "neo_casefold(content) LIKE neo_casefold(?) ESCAPE '\\'" for _ in terms
         )

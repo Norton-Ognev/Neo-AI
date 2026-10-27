@@ -15,7 +15,12 @@ FROZEN = bool(getattr(sys, "frozen", False))
 
 
 def data_dir() -> Path:
-    """Папка данных пользователя. Совпадает с той, что уже использует Neo (БД, настройки, Vosk)."""
+    """Папка данных. В установленной версии — рядом с exe (куда распаковал инсталлер)."""
+    if FROZEN:
+        # app_dir() уже возвращает папку с NeoAI.exe для замороженной сборки
+        return app_dir() / "data"
+
+    # В режиме разработки (python -m neo.desktop.launcher) оставляем как было
     root = os.environ.get("LOCALAPPDATA")
     return Path(root) / "Neo" if root else Path.home() / ".local" / "share" / "Neo"
 

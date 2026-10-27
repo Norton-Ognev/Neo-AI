@@ -1,4 +1,4 @@
-"""Offline Russian text-to-speech using Silero TTS and Windows audio playback."""
+"""Офлайн-синтез русской речи с использованием Silero TTS и воспроизведения аудио в Windows."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ _state = {
 
 
 def _cardinal(number: int, feminine: bool = False) -> str:
-    """Spell a non-negative integer in Russian for speech synthesis."""
+    """Произносит неотрицательное целое число по-русски для синтеза речи."""
     if number < 0:
         return "минус " + _cardinal(-number, feminine)
     if number == 0:
@@ -95,7 +95,7 @@ def _plural_form(number: int, one: str, few: str, many: str) -> str:
 
 
 def _speech_ready_text(text: str) -> str:
-    """Expand Russian dates, clock times and remaining numerals before Silero."""
+    """Раскрывает русские даты, время и оставшиеся числительные перед Silero."""
     def date_to_words(match: re.Match[str]) -> str:
         day = int(match.group(1))
         month = _MONTHS.index(match.group(2).casefold()) + 1
@@ -134,12 +134,12 @@ def _speech_ready_text(text: str) -> str:
 
 
 def _load_model():
-    """Load the Russian Silero model once; Torch Hub caches it for offline use."""
+    """Загружает русскую модель Silero один раз; Torch Hub кэширует её для офлайн-использования."""
     global _model
     if _model is None:
         import torch
 
-        # CPU mode keeps this usable on machines without a supported GPU.
+        # Режим CPU сохраняет работоспособность на машинах без поддерживаемой GPU.
         torch.set_num_threads(max(1, min(4, os.cpu_count() or 1)))
         _model, _ = torch.hub.load(
             "snakers4/silero-models",
@@ -164,8 +164,8 @@ def _synthesize_and_play(text: str, generation: int) -> bool:
         if generation != _speech_generation:
             return False
     model = _load_model()
-    # Silero v4 supports SSML prosody controls; slowing the full response makes
-    # short confirmations easier to follow without changing the selected voice.
+    # Silero v4 поддерживает управление просодией через SSML; замедление всего
+    # ответа делает короткие подтверждения понятнее, не меняя выбранный голос.
     ssml_text = f'<speak><prosody rate="slow">{escape(text)}</prosody></speak>'
     audio = model.apply_tts(
         ssml_text=ssml_text,
@@ -223,7 +223,7 @@ def _ensure_worker() -> None:
 
 
 def speak_text(text: str) -> None:
-    """Queue a response for local synthesis and playback without blocking API."""
+    """Ставит ответ в очередь на локальный синтез и воспроизведение, не блокируя API."""
     clean_text = " ".join(text.replace("•", " ").split())
     if not clean_text:
         return
@@ -234,7 +234,7 @@ def speak_text(text: str) -> None:
 
 
 def stop_speech() -> None:
-    """Stop current playback and discard every response that has not started."""
+    """Останавливает текущее воспроизведение и отбрасывает все ответы, которые ещё не начались."""
     global _speech_generation
     with _playback_lock:
         _speech_generation += 1
@@ -250,14 +250,14 @@ def stop_speech() -> None:
 
             sd.stop()
         except Exception:
-            # No active stream (or no audio runtime installed) is already stopped.
+            # Активного потока нет (или аудиорантайм не установлен) — всё уже остановлено.
             pass
         with _state_lock:
             _state["speaking"] = False
 
 
 def get_status() -> dict:
-    """Return diagnostics for the speech engine and its work queue."""
+    """Возвращает диагностику речевого движка и его очереди задач."""
     with _state_lock:
         return {
             **_state,
@@ -267,5 +267,5 @@ def get_status() -> dict:
 
 
 def wait_until_done() -> None:
-    """Wait until all queued speech has finished (primarily useful in demos)."""
+    """Ждёт, пока завершится вся поставленная в очередь речь (в основном полезно в демо)."""
     _speech_queue.join()

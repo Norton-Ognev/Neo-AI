@@ -24,7 +24,8 @@ import webview
 
 _CRASH_LOG = None
 try:
-    _log_root = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Neo" / "logs"
+    from .paths import data_dir
+    _log_root = data_dir() / "logs"
     _log_root.mkdir(parents=True, exist_ok=True)
     _CRASH_LOG = (_log_root / "neo-crash.log").open("ab", buffering=0)
     faulthandler.enable(file=_CRASH_LOG, all_threads=True)
