@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from .ollama_runtime import OLLAMA_MODEL, ensure_ollama_running, model_installed, read_tags, stop_ollama
-from .paths import data_dir, find_bundled_ollama, ollama_runtime_dir
+from .paths import data_dir, find_bundled_ollama, models_store_id, ollama_runtime_dir, uses_private_ollama
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +38,15 @@ def is_setup_complete() -> bool:
         state = json.loads(_state_file().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
-    return state.get("version") == SETUP_VERSION
+    # Настройка, сделанная для другого хранилища моделей (например, из режима разработки
+    # с системной Ollama), для этого запуска недействительна.
+    return state.get("version") == SETUP_VERSION and state.get("models_store") == models_store_id()
 
 
 def _mark_complete() -> None:
     _state_file().parent.mkdir(parents=True, exist_ok=True)
     _state_file().write_text(
-        json.dumps({"version": SETUP_VERSION}),
+        json.dumps({"version": SETUP_VERSION, "models_store": models_store_id()}),
         encoding="utf-8",
     )
 
@@ -52,8 +54,8 @@ def _mark_complete() -> None:
 # ---------- шаги ----------
 
 def _step_ollama_runtime(report: Callable[[str, float | None], None]) -> None:
-    if find_bundled_ollama():
-        return
+    if not uses_private_ollama() or find_bundled_ollama():
+        return  # в режиме разработки работаем с установленной Ollama
     target = ollama_runtime_dir()
     target.mkdir(parents=True, exist_ok=True)
     report("Загрузка движка Ollama…", 0)

@@ -106,7 +106,13 @@ def ensure_ollama_running() -> subprocess.Popen | None:
     if model_installed(tags):
         logger.info("Модель Neo доступна в Ollama: %s", OLLAMA_MODEL)
     else:
-        logger.warning("Модель Neo %s не найдена в Ollama.", OLLAMA_MODEL)
+        logger.warning(
+            "Модель Neo %s не найдена в Ollama (%s, OLLAMA_MODELS=%s). Есть модели: %s",
+            OLLAMA_MODEL,
+            base_url,
+            os.environ.get("OLLAMA_MODELS", "<по умолчанию>"),
+            [m.get("name") for m in (tags or {}).get("models", [])],
+        )
     return owned_process
 
 

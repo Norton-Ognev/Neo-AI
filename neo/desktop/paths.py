@@ -48,7 +48,18 @@ def _free_port() -> int:
 
 
 def uses_private_ollama() -> bool:
-    return FROZEN or find_bundled_ollama() is not None or os.environ.get("NEO_PRIVATE_OLLAMA") == "1"
+    """Своя Ollama (свой порт и папка моделей) — только в собранном exe или по NEO_PRIVATE_OLLAMA=1.
+
+    Решение НЕ должно зависеть от того, лежит ли где-то ollama.exe: иначе оно меняется
+    между процессами (setup / основной запуск) и модели оказываются в разных хранилищах.
+    В режиме разработки используется обычная Ollama пользователя (~/.ollama).
+    """
+    return FROZEN or os.environ.get("NEO_PRIVATE_OLLAMA") == "1"
+
+
+def models_store_id() -> str:
+    """Идентификатор хранилища моделей, с которым работает этот запуск."""
+    return os.environ.get("OLLAMA_MODELS") if uses_private_ollama() else "system"
 
 
 def configure_environment() -> None:

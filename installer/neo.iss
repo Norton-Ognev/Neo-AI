@@ -7,7 +7,7 @@
 #endif
 
 [Setup]
-AppId={{B7A6F3C2-5E4D-4A1B-9C7E-2D8F0A1B3C4D}
+AppId={{48ac3f7e-4fec-471e-985b-32f54cbd5800}
 AppName=Neo AI
 AppVersion={#AppVersion}
 AppPublisher=Norton-Ognev

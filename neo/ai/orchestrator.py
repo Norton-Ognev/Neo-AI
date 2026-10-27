@@ -73,6 +73,15 @@ def _normalize_hour_words(text: str) -> str:
         )
         text = re.sub(rf"\b{word}(?=\s+час(?:а|ов)?\b)", str(number), text)
 
+    # Ответ на вопрос «во сколько?» часто приходит без предлога: «десять вечера».
+    # «дня» сюда намеренно не входит: «два дня» чаще означает срок, а не время.
+    for word, number in _HOUR_WORDS.items():
+        text = re.sub(
+            rf"\b{word}(?=\s+(?:час(?:а|ов)?\s+)?(?:утра|утром|вечера|вечером|ночи|ночью)\b)",
+            str(number),
+            text,
+        )
+
     def normalize_compact_clock(match: re.Match[str]) -> str:
         digits = match.group("clock")
         split_at = len(digits) - 2
@@ -172,6 +181,18 @@ def has_explicit_clock_time(text: str) -> bool:
     ):
         return True
     if re.search(r"\b\d{1,2}\s+час(?:а|ов)?\b", normalized):
+        return True
+    # Короткий ответ без предлога: «10 вечера», «6 утра», «10 часов вечера».
+    # Раньше такие ответы не считались временем, и вопрос «Во сколько?» повторялся бесконечно.
+    for match in re.finditer(
+        r"(?<![\d:.])(\d{1,2})(?:\s+час(?:а|ов)?)?\s+(утра|утром|вечера|вечером|ночи|ночью|дня|днем)\b",
+        normalized,
+    ):
+        if not 1 <= int(match.group(1)) <= 12:
+            continue
+        before = normalized[:match.start()].rstrip()
+        if match.group(2) in {"дня", "днем"} and re.search(r"(?:через|на|за|еще|уже|только)$", before):
+            continue  # «через 2 дня», «на 2 дня» — это срок, а не время суток
         return True
     return False
 
@@ -363,7 +384,7 @@ def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
 
     time_match = re.search(
         r"\b(?:в|на|к)\s*(\d{1,2})(?:[:.](\d{2}))?"
-        r"(?:\s*час(?:а|ов)?(?:\s+(утра|дня|вечера|ночи))?)?\b|"
+        r"(?:\s*час(?:а|ов)?)?(?:\s+(утра|дня|вечера|ночи))?\b|"
         r"\b(\d{1,2})\s+час(?:а|ов)?(?:\s+(утра|дня|вечера|ночи))?\b",
         normalized,
     )
@@ -372,6 +393,8 @@ def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
         hours = int(time_match.group(1) or time_match.group(4))
         minutes = int(time_match.group(2) or 0)
         meridiem = time_match.group(3) or time_match.group(5)
+        if meridiem == "дня" and time_match.group(0).startswith("на"):
+            meridiem = None  # «на 2 дня» — срок, а не время суток
         if meridiem in {"вечера", "дня"} and hours < 12:
             hours += 12
         elif meridiem in {"утра", "ночи"} and hours == 12:
@@ -411,7 +434,7 @@ def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
     )
     body = re.sub(
         r"\b(?:в|на|к)\s*\d{1,2}(?:[:.]\d{2})?"
-        r"(?:\s*час(?:а|ов)?(?:\s+(?:утра|дня|вечера|ночи))?)?\b|"
+        r"(?:\s*час(?:а|ов)?)?(?:\s+(?:утра|дня|вечера|ночи))?\b|"
         r"\b\d{1,2}\s+час(?:а|ов)?(?:\s+(?:утра|дня|вечера|ночи))?\b",
         " ",
         body,
@@ -909,6 +932,16 @@ def process(
     save_awaiting_date = False
     save_awaiting_time = False
 
+    # «Напомни завтра позвонить Ивану»: парсер сам спрашивает «Во сколько?». Запоминаем, что ждём
+    # именно время (дата уже известна), иначе после ответа «в 10» дату спросят второй раз.
+    if (
+        reminder_intent is not None
+        and reminder_intent.action == "clarify"
+        and reminder_intent.datetime_iso
+        and not has_explicit_clock_time(user_text)
+    ):
+        save_awaiting_time = True
+
     if current_intent is None and previous_intent and context_flags["awaiting_meridiem"]:
         meridiem = meridiem_from_reply(user_text)
         if meridiem and previous_intent.datetime_iso:
@@ -1163,7 +1196,10 @@ def process(
             time_question = "Вы имеете в виду 12 дня или 12 ночи?"
         else:
             time_question = f"Вы имеете в виду {ambiguous_hour} утра или вечера?"
-        if not explicit_date_was_given(user_text):
+        date_already_known = bool(
+            context_flags["awaiting_time"] and previous_intent and previous_intent.datetime_iso
+        )
+        if not explicit_date_was_given(user_text) and not date_already_known:
             current_intent.clarify_question = (
                 f"{time_question} После этого уточню дату."
             )
@@ -1193,6 +1229,12 @@ def process(
                 missing_time_date_iso = None
         current_intent.action = "clarify"
         current_intent.datetime_iso = None
+        if not current_intent.clarify_question and context_flags["awaiting_time"]:
+            # Время уже спрашивали, но ответ не распознан: подсказываем формат вместо того же вопроса.
+            current_intent.clarify_question = (
+                f"Не расслышал время для «{current_intent.content}». "
+                "Скажите, например: «в 18:00» или «в 6 вечера»."
+            )
         if not current_intent.clarify_question:
             if missing_time_action == "create_meeting":
                 current_intent.clarify_question = f"На какое время запланировать «{current_intent.content}»?"
@@ -1211,6 +1253,7 @@ def process(
         and not missing_time_action
         and not save_awaiting_time
         and not (resolved_meridiem_from_context and save_awaiting_date)
+        and not save_awaiting_meridiem  # иначе вопрос «утра или вечера?» превращается обратно в create_task
         and current_intent.action in ["clarify", previous_intent.action]
     ):
         if current_intent.action == "clarify" or current_intent.datetime_iso or current_intent.content:
