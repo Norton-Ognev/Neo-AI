@@ -71,15 +71,23 @@ def save_intent(
     awaiting_meridiem: bool = False,
     awaiting_date: bool = False,
     awaiting_time: bool = False,
+    is_reminder: bool = False,          # ← новое
 ):
-    """Сохраняет интент в память для последующего склеивания контекста."""
     _session_storage[session_id] = {
         "intent": intent,
         "updated_at": datetime.now(),
         "awaiting_meridiem": awaiting_meridiem,
         "awaiting_date": awaiting_date,
         "awaiting_time": awaiting_time,
+        "is_reminder": is_reminder,     # ← новое
     }
+
+
+def get_is_reminder(session_id: str = "default") -> bool:
+    """Была ли исходная команда текущего диалога именно напоминанием (а не просто задачей)."""
+    if session_id not in _session_storage:
+        return False
+    return bool(_session_storage[session_id].get("is_reminder", False))
 
 
 def clear_context(session_id: str = "default"):

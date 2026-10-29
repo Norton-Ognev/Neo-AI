@@ -7,6 +7,7 @@ import os
 import queue
 import re
 import threading
+import time
 from xml.sax.saxutils import escape
 
 from . import audio_devices
@@ -17,6 +18,9 @@ _worker_thread: threading.Thread | None = None
 _start_lock = threading.Lock()
 _state_lock = threading.Lock()
 _playback_lock = threading.Lock()
+_model_lock = threading.Lock()  # одна загрузка модели, даже если прогрев и первый ответ совпали
+_synth_lock = threading.Lock()  # пробный синтез прогрева не должен идти параллельно с настоящим
+_warmup_thread: threading.Thread | None = None
 _speech_generation = 0
 _model = None
 _SAMPLE_RATE = 24_000
@@ -137,23 +141,81 @@ def _load_model():
     """Загружает русскую модель Silero один раз; Torch Hub кэширует её для офлайн-использования."""
     global _model
     if _model is None:
-        import torch
+        with _model_lock:
+            if _model is None:  # пока ждали замок, модель мог загрузить прогрев
+                import torch
 
-        # Режим CPU сохраняет работоспособность на машинах без поддерживаемой GPU.
-        torch.set_num_threads(max(1, min(4, os.cpu_count() or 1)))
-        _model, _ = torch.hub.load(
-            "snakers4/silero-models",
-            "silero_tts",
-            language="ru",
-            speaker="v4_ru",
-            trust_repo=True,
-        )
-        _model.to(torch.device("cpu"))
+                # Режим CPU сохраняет работоспособность на машинах без поддерживаемой GPU.
+                torch.set_num_threads(max(1, min(4, os.cpu_count() or 1)))
+                model, _ = torch.hub.load(
+                    "snakers4/silero-models",
+                    "silero_tts",
+                    language="ru",
+                    speaker="v4_ru",
+                    trust_repo=True,
+                )
+                model.to(torch.device("cpu"))
+                _model = model  # публикуем только полностью готовую модель
     with _state_lock:
         _state["engine_ready"] = True
         _state["warning"] = None
         _state["last_error"] = None
     return _model
+
+
+def _apply_tts(model, text: str):
+    ssml_text = f'<speak><prosody rate="slow">{escape(text)}</prosody></speak>'
+    with _synth_lock:
+        return model.apply_tts(
+            ssml_text=ssml_text,
+            speaker=_SPEAKER,
+            sample_rate=_SAMPLE_RATE,
+        )
+
+
+def warm_up() -> None:
+    """Готовит голос заранее: тяжёлые импорты, загрузка модели и пробный синтез.
+
+    Без этого всё это происходило при первом ответе: Ollama уже отвечала,
+    а Silero ещё подгружалась. Первый вызов apply_tts тоже медленнее последующих,
+    поэтому после загрузки делаем короткий пробный синтез (звук не воспроизводится).
+    """
+    import numpy  # noqa: F401  (предзагрузка)
+
+    try:
+        import sounddevice  # noqa: F401  (подгружает PortAudio)
+    except Exception:  # noqa: BLE001 — нет аудиорантайма: модель всё равно греем
+        logger.warning("sounddevice недоступен при прогреве TTS", exc_info=True)
+
+    model = _load_model()
+    _apply_tts(model, "Привет.")
+
+
+def _warmup_worker() -> None:
+    started = time.monotonic()
+    try:
+        warm_up()
+    except Exception as exc:  # noqa: BLE001
+        # Например, первый запуск без интернета. Не страшно: модель загрузится
+        # при первом ответе, как раньше, а ошибку покажет get_status().
+        with _state_lock:
+            _state["last_error"] = f"{type(exc).__name__}: {exc}"
+            _state["warning"] = "Не удалось заранее загрузить голосовую модель; загрузится при первом ответе."
+        logger.warning("Прогрев Silero TTS не удался", exc_info=True)
+    else:
+        logger.info("Silero TTS прогрет за %.1f с", time.monotonic() - started)
+
+
+def start_warmup() -> threading.Thread:
+    """Запускает прогрев голоса в фоне (не блокирует запуск API). Повторный вызов безопасен."""
+    global _warmup_thread
+    with _start_lock:
+        if _warmup_thread is None or not _warmup_thread.is_alive():
+            _warmup_thread = threading.Thread(
+                target=_warmup_worker, daemon=True, name="neo-silero-tts-warmup"
+            )
+            _warmup_thread.start()
+        return _warmup_thread
 
 
 def _synthesize_and_play(text: str, generation: int) -> bool:
@@ -166,12 +228,7 @@ def _synthesize_and_play(text: str, generation: int) -> bool:
     model = _load_model()
     # Silero v4 поддерживает управление просодией через SSML; замедление всего
     # ответа делает короткие подтверждения понятнее, не меняя выбранный голос.
-    ssml_text = f'<speak><prosody rate="slow">{escape(text)}</prosody></speak>'
-    audio = model.apply_tts(
-        ssml_text=ssml_text,
-        speaker=_SPEAKER,
-        sample_rate=_SAMPLE_RATE,
-    )
+    audio = _apply_tts(model, text)
     with _playback_lock:
         if generation != _speech_generation:
             return False
@@ -263,6 +320,7 @@ def get_status() -> dict:
             **_state,
             "queued_items": _speech_queue.qsize(),
             "worker_running": bool(_worker_thread and _worker_thread.is_alive()),
+            "warming_up": bool(_warmup_thread and _warmup_thread.is_alive()),
         }
 
 

@@ -155,7 +155,10 @@ def process_text(request: TextRequest, cancellation_event=None) -> TextResponse:
                     request.session_id, updated_intent, conflicts,
                     event_type=pending["event_type"],
                 )
-                context_manager.save_intent(updated_intent, request.session_id)
+                context_manager.save_intent(
+                    updated_intent, request.session_id,
+                    is_reminder=pending["event_type"] == "reminder",
+                )
                 return _conflict_response(updated_intent, conflicts)
             context_manager.clear_pending_conflict(request.session_id)
             context_manager.clear_context(request.session_id)
@@ -192,7 +195,10 @@ def process_text(request: TextRequest, cancellation_event=None) -> TextResponse:
                 conflicts = EventService.find_conflicts(datetime.fromisoformat(intent.datetime_iso.replace("Z", "+00:00")))
                 if conflicts:
                     context_manager.save_pending_conflict(request.session_id, intent, conflicts, event_type=pending["event_type"])
-                    context_manager.save_intent(intent, request.session_id)
+                    context_manager.save_intent(
+                        intent, request.session_id,
+                        is_reminder=pending["event_type"] == "reminder",
+                    )
                     return _conflict_response(intent, conflicts)
                 context_manager.clear_pending_conflict(request.session_id)
                 return _save_intent_event(intent, pending["event_type"])
@@ -212,6 +218,9 @@ def process_text(request: TextRequest, cancellation_event=None) -> TextResponse:
             context_manager.clear_context(request.session_id)
             return _save_intent_event(pending["intent"], pending["event_type"])
         context_manager.clear_pending_conflict(request.session_id)
+
+    was_reminder_from_context = context_manager.get_is_reminder(request.session_id)
+
     try:
         intent = _get_intent(text, request.session_id, cancellation_event)
     except (ConnectionError, ResponseError) as exc:
@@ -237,15 +246,15 @@ def process_text(request: TextRequest, cancellation_event=None) -> TextResponse:
                 response_text="Уточните, пожалуйста, содержание события и время.",
             )
 
-        event_type = "meeting" if intent.action == "create_meeting" else "task"
-        if event_type == "task" and re.search(r"\bнапомн", text.casefold()):
-            event_type = "reminder"
+        event_type = _resolve_event_type(intent, text, was_reminder_from_context)
         when = datetime.fromisoformat(intent.datetime_iso.replace("Z", "+00:00"))
         conflicts = EventService.find_conflicts(when)
         if conflicts:
             raise_if_cancelled(cancellation_event)
             context_manager.save_pending_conflict(request.session_id, intent, conflicts, event_type=event_type)
-            context_manager.save_intent(intent, request.session_id)
+            context_manager.save_intent(
+                intent, request.session_id, is_reminder=event_type == "reminder"
+            )
             return _conflict_response(intent, conflicts)
         raise_if_cancelled(cancellation_event)
         return _save_intent_event(intent, event_type)
@@ -315,6 +324,17 @@ def process_text(request: TextRequest, cancellation_event=None) -> TextResponse:
 
     logger.warning("Unsupported assistant action: %s", intent.action)
     return TextResponse(action="clarify", response_text="Не удалось выполнить команду.")
+
+
+def _resolve_event_type(intent, text: str, was_reminder_from_context: bool) -> str:
+    """reminder / meeting / task. Слово «напомни» главнее типа, который выбрал LLM:
+    «напомни про встречу» — это напоминание, а не встреча. «Напомни» могло прозвучать
+    и в прошлой реплике диалога (время/дату человек назвал отдельным сообщением)."""
+    from neo.ai.orchestrator import is_reminder_request
+
+    if was_reminder_from_context or is_reminder_request(text):
+        return "reminder"
+    return "meeting" if intent.action == "create_meeting" else "task"
 
 
 def _get_intent(text: str, session_id: str, cancellation_event=None):

@@ -111,9 +111,9 @@ def _serve() -> None:
             url=URL,
             width=1100,
             height=760,
-            min_size=(720, 560),
-            resizable=True,
-            js_api=bridge,
+            min_size = (700, 700),
+        resizable = True,
+        js_api = bridge,
         )
         bridge.bind_window(window)
         window.events.closing += bridge.shutdown

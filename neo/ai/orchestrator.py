@@ -273,6 +273,15 @@ def resolve_ambiguous_hour(hour: int, meridiem: str) -> int:
         return 12 if hour == 12 else (hour + 12 if hour < 12 else hour)
     return 0 if hour == 12 else hour
 
+# «напомни», «напомнить», «напоминание», «напоминалка», «напоминай» — все формы.
+# Раньше проверяли \bнапомн, и «напоминание» (напомин-) в него не попадало.
+_REMINDER_RE = re.compile(r"\bнапом[ни]\w*", re.IGNORECASE)
+
+
+def is_reminder_request(text: str) -> bool:
+    return bool(_REMINDER_RE.search(text.casefold().replace("ё", "е")))
+
+
 def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
     """Отделяет текст напоминания от запланированных даты и времени."""
     normalized = _normalize_hour_words(text.casefold().replace("ё", "е"))
@@ -369,7 +378,9 @@ def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
         target_date = now.date() + timedelta(days=offset)
 
     time_match = re.search(
-        r"\b(?:в|на|к)\s*(\d{1,2})(?:[:.](\d{2}))?"
+        # «на 3 ноября», «на 5 дней», «к 3-му числу» — это дата/срок, а не время
+        r"\b(?:в|на|к)\s*(\d{1,2})(?!\d)(?!\s*(?:[-–]?\s*(?:е|го|му)\b|числ|январ|феврал|март|"
+        r"апрел|ма[яй]|июн|июл|август|сентябр|октябр|ноябр|декабр|недел|дн))(?:[:.](\d{2}))?"
         r"(?:\s*час(?:а|ов)?)?(?:\s+(утра|дня|вечера|ночи))?\b|"
         r"\b(\d{1,2})\s+час(?:а|ов)?(?:\s+(утра|дня|вечера|ночи))?\b",
         normalized,
@@ -395,24 +406,26 @@ def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
             body_start = selected_date_match.start() - reminder_verb.end()
             body_end = selected_date_match.end() - reminder_verb.end()
             raw_body = text[reminder_verb.end():]
-            body = raw_body[:body_start] + " " + raw_body[body_end:]
+            # «напоминание на 3 ноября …»: предлог «на» уходит вместе с датой
+            head = re.sub(r"\s*\bна\s*$", "", raw_body[:body_start], flags=re.IGNORECASE)
+            body = head + " " + raw_body[body_end:]
     body = re.sub(r"^\s*(?:мне|пожалуйста|[,!:—-])+\s*", "", body, flags=re.IGNORECASE)
     body = re.sub(
-        r"^\s*(?:о\s+том,?\s+что|что|о|об|от|про)\s*[,!:—-]*\s*",
+        r"^\s*(?:о\s+том,?\s+что|что|о|об|от|про)(?!\w)\s*[,!:—-]*\s*",
         "",
         body,
         count=1,
         flags=re.IGNORECASE,
     )
     body = re.sub(
-        rf"\b(?:{day_pattern})\b",
+        rf"(?:\bна\s+)?\b(?:{day_pattern})\b",
         " ",
         body,
         count=1 if schedule_day and schedule_day.start() >= reminder_verb.start() else 0,
         flags=re.IGNORECASE,
     )
     body = re.sub(
-        r"^\s*(?:о\s+том,?\s+что|что|о|об|от|про)\s*[,!:—-]*\s*",
+        r"^\s*(?:о\s+том,?\s+что|что|о|об|от|про)(?!\w)\s*[,!:—-]*\s*",
         "",
         body,
         count=1,
@@ -438,7 +451,7 @@ def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
             flags=re.IGNORECASE,
         )
         body = re.sub(
-            r"^\s*(?:о\s+том,?\s+что|что|о|об|от|про)\s*[,!:—-]*\s*",
+            r"^\s*(?:о\s+том,?\s+что|что|о|об|от|про)(?!\w)\s*[,!:—-]*\s*",
             "",
             body,
             count=1,
@@ -476,10 +489,12 @@ def parse_explicit_reminder_command(text: str, now: datetime) -> Intent | None:
         if hours is not None:
             question = f"На какую дату поставить напоминание о том, что {body}? Время — {hours:02d}:{minutes:02d}."
     elif hours is None:
+        month_genitive = {v: k for k, v in _MONTH_NUMBERS.items()}
         date_word = (
             "сегодня" if target_date == now.date()
             else "завтра" if target_date == now.date() + timedelta(days=1)
-            else "послезавтра"
+            else "послезавтра" if target_date == now.date() + timedelta(days=2)
+            else f"{target_date.day} {month_genitive[target_date.month]}"
         )
         question = f"Во сколько {date_word} поставить напоминание?"
     else:
@@ -901,6 +916,14 @@ def process(
         context_manager.clear_context(session_id)
         return list_query
 
+    # «Найти мероприятие …» разбираем до парсеров создания: слова «мероприятие»,
+    # «встреча», «прогулка» в запросе не должны превращать поиск в создание встречи.
+    from .tools.search import parse_search_command
+    search_query = parse_search_command(user_text)
+    if search_query is not None:
+        context_manager.clear_context(session_id)
+        return Intent(action="search_events", search_query=search_query)
+
     reminder_intent = parse_explicit_reminder_command(user_text, now)
     explicit_create_intent = (
         parse_explicit_create_command(user_text, now)
@@ -1088,6 +1111,13 @@ def process(
                 ).isoformat(),
             )
             resolved_date_from_context = True
+        elif previous_datetime is None and selected_date is not None:
+            # Новое: у прошлого интента совсем нет даты — запоминаем дату,
+            # но время ещё не знаем (поставим 00:00 как заглушку).
+            current_intent = Intent(
+                action=previous_intent.action,
+                content=previous_intent.content,
+                datetime_iso=datetime.combine(selected_date, datetime_time.min, tzinfo=now.tzinfo).isoformat(),)
 
     # === ХИТРОСТЬ: Если в памяти есть контекст, проверяем на короткий ввод времени ===
     if current_intent is None and previous_intent and (
@@ -1111,6 +1141,20 @@ def process(
             ),
         )
 
+    if (
+        current_intent is None
+        and previous_intent
+        and previous_intent.action in {"create_task", "create_meeting"}
+        and previous_intent.content is None
+        and not explicit_date_was_given(user_text)
+        and not has_explicit_clock_time(user_text)
+        and 0 < len(user_text.strip()) <= 500
+    ):
+        current_intent = Intent(
+            action=previous_intent.action,
+            content=user_text.strip(),
+            datetime_iso=previous_intent.datetime_iso,
+        )
     # === Если это не короткий ввод времени, гоним через Ollama ===
     if not current_intent:
         system_prompt = build_system_prompt(now)
@@ -1213,17 +1257,31 @@ def process(
         current_intent.action = "clarify"
         current_intent.datetime_iso = None
         if not current_intent.clarify_question and context_flags["awaiting_time"]:
-            # Время уже спрашивали, но ответ не распознан: подсказываем формат вместо того же вопроса.
             current_intent.clarify_question = (
                 f"Не расслышал время для «{current_intent.content}». "
                 "Скажите, например: «в 18:00» или «в 6 вечера»."
             )
         if not current_intent.clarify_question:
-            if missing_time_action == "create_meeting":
-                current_intent.clarify_question = f"На какое время запланировать «{current_intent.content}»?"
+            if missing_time_date_iso is None:
+                # нет ни даты, ни времени — спрашиваем оба
+                if missing_time_action == "create_meeting":
+                    current_intent.clarify_question = (
+                        f"На какую дату и время запланировать «{current_intent.content}»?"
+                    )
+                else:
+                    current_intent.clarify_question = (
+                        f"На какую дату и время поставить задачу «{current_intent.content}»?"
+                    )
             else:
-                current_intent.clarify_question = f"На какое время поставить задачу «{current_intent.content}»?"
-
+                # дата уже известна — спрашиваем только время
+                if missing_time_action == "create_meeting":
+                    current_intent.clarify_question = (
+                        f"На какое время запланировать «{current_intent.content}»?"
+                    )
+                else:
+                    current_intent.clarify_question = (
+                        f"На какое время поставить задачу «{current_intent.content}»?"
+                    )
     # === АВТОМАТИЧЕСКАЯ НОРМАЛИЗАЦИЯ ПОИСКОВОГО ЗАПРОСА (Раздел 5.6 ТЗ) ===
     if current_intent.action == "search_events" and current_intent.search_query:
         from .tools.search import normalize_query
@@ -1257,8 +1315,15 @@ def process(
             remembered_action = "clarify"
             if any(w in text_lower for w in ["напомни", "задача", "напоминание", "сделать", "помыть", "купить"]):
                 remembered_action = "create_task"
-            elif any(w in text_lower for w in ["встреча", "встречу", "созвон", "свидание", "переговоры", "созвониться", "прогулка", "прогулку", "обед", "ужин"]):
+            elif any(w in text_lower for w in
+                     ["встреча", "встречу", "созвон", "свидание", "переговоры", "созвониться", "прогулка", "прогулку",
+                      "обед", "ужин"]):
                 remembered_action = "create_meeting"
+
+        is_reminder_flag = (
+                context_manager.get_is_reminder(session_id)
+                or is_reminder_request(user_text)
+        )
 
         intent_to_save = Intent(
             action=remembered_action if remembered_action != "clarify" else (
@@ -1292,6 +1357,7 @@ def process(
             awaiting_meridiem=save_awaiting_meridiem,
             awaiting_date=save_awaiting_date,
             awaiting_time=save_awaiting_time,
+            is_reminder=is_reminder_flag,  # ← новое
         )
     else:
         context_manager.clear_context(session_id)

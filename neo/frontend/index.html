@@ -21,6 +21,28 @@
     </header>
 
     <main class="main-layout">
+      <aside class="sidebar js-sidebar" aria-label="Ближайшие напоминания и задачи">
+        <section class="sidebar-block" aria-labelledby="reminders-heading">
+          <header class="sidebar-block-header">
+            <h2 id="reminders-heading">Напоминания</h2>
+            <span class="sidebar-block-hint js-reminders-window">+3 дн.</span>
+          </header>
+          <div class="sidebar-list js-reminders-list" aria-live="polite">
+            <p class="sidebar-empty">Загрузка…</p>
+          </div>
+        </section>
+        <section class="sidebar-block" aria-labelledby="tasks-heading">
+          <header class="sidebar-block-header">
+            <h2 id="tasks-heading">Задачи</h2>
+            <button class="sidebar-filter js-tasks-toggle-completed" type="button"
+              aria-pressed="true" title="Показывать выполненные задачи">Выполненные</button>
+          </header>
+          <div class="sidebar-list js-tasks-list" aria-live="polite">
+            <p class="sidebar-empty">Загрузка…</p>
+          </div>
+        </section>
+      </aside>
+
       <section class="assistant-panel" aria-label="Диалог с Нео">
         <div class="assistant-intro">
           <span class="eyebrow">ВАШ ЛОКАЛЬНЫЙ АССИСТЕНТ</span>
@@ -154,7 +176,12 @@
           </section>
           <section class="other-settings settings-tab-panel" data-panel="other" aria-labelledby="other-settings-title" hidden>
             <h3 id="other-settings-title">Прочее</h3>
-            <p class="settings-description">Параметры запуска приложения.</p>
+            <p class="settings-description">Параметры отображения и запуска приложения.</p>
+            <label class="setting-field" for="reminder-days-input">
+              <span>Показывать напоминания на <output class="js-reminder-days-value">3</output> дн. вперёд</span>
+              <input class="js-reminder-days-input" id="reminder-days-input" type="number" min="1" max="365" step="1" value="3">
+            </label>
+            <p class="settings-feedback js-reminder-days-feedback" role="status"></p>
             <label class="autostart-row" for="autostart-toggle">
               <span><strong>Автозапуск</strong><small>Запускать Neo при входе в Windows</small></span>
               <input class="autostart-switch js-autostart-switch" id="autostart-toggle" type="checkbox" role="switch" aria-label="Автозапуск Neo">

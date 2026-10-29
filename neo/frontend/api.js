@@ -37,6 +37,30 @@ export function getEvents(start, end, includeCompleted = true) {
   return request(`/api/events?${params}`);
 }
 
+export function getUpcomingReminders(days) {
+  const params = new URLSearchParams();
+  if (days) params.set('days', String(days));
+  const query = params.toString();
+  return request(`/api/events/upcoming-reminders${query ? `?${query}` : ''}`);
+}
+
+export function getTasks(includeCompleted = true) {
+  const params = new URLSearchParams({ include_completed: String(includeCompleted) });
+  return request(`/api/events/tasks?${params}`);
+}
+
+export function getSettings() {
+  return request('/api/settings');
+}
+
+export function updateSettings(payload) {
+  return request('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function updateEvent(eventId, event) {
   return request(`/api/events/${eventId}`, {
     method: 'PUT',

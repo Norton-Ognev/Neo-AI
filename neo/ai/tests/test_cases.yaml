@@ -60,7 +60,7 @@
   expected:
     action: "list_events"
 
-# === 4. SEARCH_EVENTS (6 шт) ===
+# === 4. SEARCH_EVENTS (9 шт) ===
 - user_text: "Найди записи где упоминался пароль от роутера"
   expected:
     action: "search_events"
@@ -77,6 +77,15 @@
   expected:
     action: "search_events"
 - user_text: "Найди где я записывал адрес стоматологии"
+  expected:
+    action: "search_events"
+- user_text: "Найти мероприятие день рождения Олега"
+  expected:
+    action: "search_events"
+- user_text: "Напомни, когда у меня встреча с Димой"
+  expected:
+    action: "search_events"
+- user_text: "Напомни, во сколько у меня прогулка"
   expected:
     action: "search_events"
 

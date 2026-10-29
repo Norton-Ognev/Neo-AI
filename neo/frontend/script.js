@@ -1,4 +1,17 @@
-import { cancelRequest, deleteEvent, getEvents, getVoiceStatus, sendText, sendVoice, stopSpeech, updateEvent } from './api.js';
+import {
+  cancelRequest,
+  deleteEvent,
+  getEvents,
+  getSettings,
+  getTasks,
+  getUpcomingReminders,
+  getVoiceStatus,
+  sendText,
+  sendVoice,
+  stopSpeech,
+  updateEvent,
+  updateSettings,
+} from './api.js';
 
 const app = document.querySelector('.js-app-container');
 const statusEl = document.querySelector('.js-assistant-status');
@@ -34,6 +47,14 @@ const autostartSwitch = document.querySelector('.js-autostart-switch');
 const autostartFeedback = document.querySelector('.js-autostart-feedback');
 const wakeSwitch = document.querySelector('.js-wake-switch');
 const wakeFeedback = document.querySelector('.js-wake-feedback');
+const sidebar = document.querySelector('.js-sidebar');
+const remindersList = document.querySelector('.js-reminders-list');
+const remindersWindowLabel = document.querySelector('.js-reminders-window');
+const tasksList = document.querySelector('.js-tasks-list');
+const tasksToggleCompleted = document.querySelector('.js-tasks-toggle-completed');
+const reminderDaysInput = document.querySelector('.js-reminder-days-input');
+const reminderDaysValue = document.querySelector('.js-reminder-days-value');
+const reminderDaysFeedback = document.querySelector('.js-reminder-days-feedback');
 
 const months = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
 const screenHideTimers = new WeakMap();
@@ -51,6 +72,13 @@ let editingEvent = null;
 let eventEditTrigger = null;
 let speechMonitorId = 0;
 let lastWakeResponse = null;
+
+// === Боковая панель (напоминания + задачи) ===
+let appSettings = { reminder_days_ahead: 3 };
+let upcomingReminders = [];
+let allTasks = [];
+let showCompletedTasks = true;
+let sidebarRefreshHandle = null;
 
 function setStatus(message, busy = false) {
   statusEl.textContent = message;
@@ -70,6 +98,216 @@ function showReply(message) {
   replyEl.textContent = message || '';
   replyEl.classList.toggle('has-content', Boolean(message));
 }
+
+// ===== Хелперы для боковой панели =====
+
+function formatReminderDate(iso) {
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return iso;
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+  const time = dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  if (sameDay(dt, today)) return `Сегодня, ${time}`;
+  if (sameDay(dt, tomorrow)) return `Завтра, ${time}`;
+  return `${dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}, ${time}`;
+}
+
+function formatDuration(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  if (days > 0) {
+    return `${days} д. ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatOverdue(ms) {
+  const totalSec = Math.floor(-ms / 1000);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  if (days > 0) return `просрочено на ${days} д.`;
+  if (hours > 0) return `просрочено на ${hours} ч.`;
+  if (minutes > 0) return `просрочено на ${minutes} мин.`;
+  return 'просрочено';
+}
+
+function applyTimerLabel(el, diffMs, completed) {
+  if (completed) {
+    el.classList.add('is-completed');
+    el.classList.remove('is-overdue');
+    el.textContent = 'выполнено';
+    return;
+  }
+  if (!el.dataset.deadline) {
+    el.classList.remove('is-overdue', 'is-completed');
+    el.textContent = 'без срока';
+    return;
+  }
+  if (diffMs < 0) {
+    el.classList.add('is-overdue');
+    el.classList.remove('is-completed');
+    el.textContent = formatOverdue(diffMs);
+  } else {
+    el.classList.remove('is-overdue', 'is-completed');
+    el.textContent = `через ${formatDuration(diffMs)}`;
+  }
+  const parent = el.closest('.sidebar-item');
+  if (parent) {
+    if (diffMs < 0 && !completed) parent.classList.add('is-overdue');
+    else parent.classList.remove('is-overdue');
+  }
+}
+
+function renderReminders() {
+  if (remindersWindowLabel) {
+    remindersWindowLabel.textContent = `+${appSettings.reminder_days_ahead} дн.`;
+  }
+  if (!remindersList) return;
+  if (!upcomingReminders.length) {
+    remindersList.replaceChildren(Object.assign(document.createElement('p'), {
+      className: 'sidebar-empty',
+      textContent: 'Нет ближайших напоминаний.',
+    }));
+    return;
+  }
+  remindersList.replaceChildren();
+  for (const item of upcomingReminders) {
+    const row = document.createElement('div');
+    row.className = 'sidebar-item sidebar-item-reminder';
+    const content = document.createElement('div');
+    content.className = 'sidebar-item-content';
+    content.textContent = item.content;
+    const meta = document.createElement('div');
+    meta.className = 'sidebar-item-meta';
+    const when = document.createElement('span');
+    when.className = 'sidebar-item-when';
+    when.textContent = item.datetime_iso ? formatReminderDate(item.datetime_iso) : 'Без времени';
+    meta.append(when);
+    row.append(content, meta);
+    remindersList.append(row);
+  }
+}
+
+function renderTasks() {
+  if (!tasksList) return;
+  const visible = showCompletedTasks ? allTasks : allTasks.filter((t) => !t.is_completed);
+  if (!visible.length) {
+    tasksList.replaceChildren(Object.assign(document.createElement('p'), {
+      className: 'sidebar-empty',
+      textContent: allTasks.length ? 'Нет активных задач.' : 'Задач нет.',
+    }));
+    return;
+  }
+  const now = Date.now();
+  tasksList.replaceChildren();
+  for (const item of visible) {
+    const row = document.createElement('div');
+    row.className = 'sidebar-item sidebar-item-task';
+    if (item.is_completed) row.classList.add('is-completed');
+    row.dataset.taskId = String(item.id);
+
+    const content = document.createElement('div');
+    content.className = 'sidebar-item-content';
+    content.textContent = item.content;
+
+    const meta = document.createElement('div');
+    meta.className = 'sidebar-item-meta';
+
+    const when = document.createElement('span');
+    when.className = 'sidebar-item-when';
+    if (item.datetime_iso) {
+      when.textContent = new Date(item.datetime_iso).toLocaleString('ru-RU', {
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+      });
+    } else {
+      when.textContent = 'Без срока';
+    }
+
+    const timer = document.createElement('span');
+    timer.className = 'sidebar-item-timer';
+    timer.dataset.deadline = item.datetime_iso || '';
+    timer.dataset.completed = item.is_completed ? '1' : '0';
+    timer.setAttribute('aria-live', 'off');
+    if (item.datetime_iso) {
+      const diff = new Date(item.datetime_iso).getTime() - now;
+      applyTimerLabel(timer, diff, Boolean(item.is_completed));
+    } else {
+      applyTimerLabel(timer, 0, Boolean(item.is_completed));
+    }
+
+    meta.append(when, timer);
+    row.append(content, meta);
+    tasksList.append(row);
+  }
+}
+
+function tickCountdowns() {
+  if (!tasksList) return;
+  const now = Date.now();
+  for (const el of tasksList.querySelectorAll('.sidebar-item-timer')) {
+    const deadline = el.dataset.deadline;
+    const completed = el.dataset.completed === '1';
+    if (!deadline) {
+      applyTimerLabel(el, 0, completed);
+      continue;
+    }
+    const diff = new Date(deadline).getTime() - now;
+    applyTimerLabel(el, diff, completed);
+  }
+}
+
+async function loadAppSettings() {
+  try {
+    const settings = await getSettings();
+    if (settings && typeof settings.reminder_days_ahead === 'number') {
+      appSettings = { ...appSettings, ...settings };
+    }
+  } catch (error) {
+    console.warn('Не удалось загрузить настройки:', error);
+  }
+  if (reminderDaysInput) {
+    reminderDaysInput.value = String(appSettings.reminder_days_ahead);
+  }
+  if (reminderDaysValue) {
+    reminderDaysValue.textContent = String(appSettings.reminder_days_ahead);
+  }
+}
+
+async function loadSidebar() {
+  try {
+    const [reminders, tasks] = await Promise.all([
+      getUpcomingReminders(appSettings.reminder_days_ahead),
+      getTasks(true),
+    ]);
+    upcomingReminders = Array.isArray(reminders) ? reminders : [];
+    allTasks = Array.isArray(tasks) ? tasks : [];
+    renderReminders();
+    renderTasks();
+  } catch (error) {
+    if (remindersList) {
+      remindersList.replaceChildren(Object.assign(document.createElement('p'), {
+        className: 'sidebar-empty',
+        textContent: 'Не удалось загрузить напоминания.',
+      }));
+    }
+    if (tasksList) {
+      tasksList.replaceChildren(Object.assign(document.createElement('p'), {
+        className: 'sidebar-empty',
+        textContent: 'Не удалось загрузить задачи.',
+      }));
+    }
+  }
+}
+
+// ====== Общая инициализация ======
 
 async function stopCurrentSpeech() {
   speechMonitorId += 1;
@@ -98,7 +336,6 @@ function monitorSpeech(queued) {
         speechStopButton.hidden = !active;
         if (!active) return;
       } catch {
-        // Keep the stop control available if status polling is temporarily unavailable.
         return;
       }
       await new Promise((resolve) => window.setTimeout(resolve, 400));
@@ -247,6 +484,7 @@ window.addEventListener('neo-wake-state', (event) => {
     showReply(state.last_response);
     monitorSpeech(Boolean(state.speech_queued));
     void loadMonthEvents();
+    void loadSidebar();
   }
 
   switch (state.phase) {
@@ -353,6 +591,7 @@ async function submitCommand(text) {
     monitorSpeech(result.speech_queued);
     if (!result.speech_queued) setStatus(result.action === 'clarify' ? 'Нео ждёт уточнение' : 'Готово');
     await loadMonthEvents();
+    void loadSidebar();
   } catch (error) {
     if (error.name === 'AbortError') {
       setStatus('Обработка отменена.');
@@ -437,6 +676,7 @@ async function toggleRecording() {
     monitorSpeech(response.speech_queued);
     if (!response.speech_queued) setStatus(response.transcription ? `Распознано: «${response.transcription}»` : 'Готово');
     await loadMonthEvents();
+    void loadSidebar();
   } catch (error) {
     if (error.name === 'AbortError') {
       isRecording = false;
@@ -464,6 +704,48 @@ async function toggleRecording() {
   }
 }
 micButton.addEventListener('click', toggleRecording);
+
+// ===== Обработчики настроек и кнопок боковой панели =====
+
+if (tasksToggleCompleted) {
+  tasksToggleCompleted.addEventListener('click', () => {
+    showCompletedTasks = !showCompletedTasks;
+    tasksToggleCompleted.setAttribute('aria-pressed', String(showCompletedTasks));
+    renderTasks();
+  });
+}
+
+if (reminderDaysInput) {
+  reminderDaysInput.addEventListener('input', () => {
+    if (reminderDaysValue) {
+      reminderDaysValue.textContent = reminderDaysInput.value || String(appSettings.reminder_days_ahead);
+    }
+  });
+  reminderDaysInput.addEventListener('change', async () => {
+    const value = parseInt(reminderDaysInput.value, 10);
+    if (!Number.isFinite(value) || value < 1) {
+      reminderDaysInput.value = String(appSettings.reminder_days_ahead);
+      if (reminderDaysValue) reminderDaysValue.textContent = String(appSettings.reminder_days_ahead);
+      return;
+    }
+    try {
+      const updated = await updateSettings({ reminder_days_ahead: value });
+      if (updated && typeof updated.reminder_days_ahead === 'number') {
+        appSettings = { ...appSettings, ...updated };
+      }
+      reminderDaysInput.value = String(appSettings.reminder_days_ahead);
+      if (reminderDaysValue) reminderDaysValue.textContent = String(appSettings.reminder_days_ahead);
+      if (reminderDaysFeedback) {
+        reminderDaysFeedback.textContent = `Напоминания показываются на ${appSettings.reminder_days_ahead} дн. вперёд.`;
+      }
+      await loadSidebar();
+    } catch (error) {
+      if (reminderDaysFeedback) {
+        reminderDaysFeedback.textContent = error.message || 'Не удалось сохранить настройку.';
+      }
+    }
+  });
+}
 
 function monthBoundaryIso(date) {
   const local = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -650,6 +932,7 @@ eventEditorForm.addEventListener('submit', async (event) => {
     setStatus('Изменения сохранены');
     closeEventEditor(false);
     await loadMonthEvents();
+    void loadSidebar();
     calendarClose.focus();
   } catch (error) {
     editorFeedback.textContent = error.message || 'Не удалось сохранить изменения.';
@@ -686,6 +969,7 @@ document.querySelector('.js-delete-confirm-button').addEventListener('click', as
     setStatus('Событие удалено');
     closeEventEditor(false);
     await loadMonthEvents();
+    void loadSidebar();
     calendarClose.focus();
   } catch (error) {
     deleteFeedback.textContent = error.message || 'Не удалось удалить событие.';
@@ -726,6 +1010,7 @@ function hideScreen(screen) {
   screenHideTimers.set(screen, timer);
 }
 calendarToggle.addEventListener('click', () => {
+  if (sidebar) sidebar.hidden = true;
   showScreen(calendarView);
   hideScreen(assistantPanel);
   calendarToggle.setAttribute('aria-expanded', 'true');
@@ -733,9 +1018,11 @@ calendarToggle.addEventListener('click', () => {
 });
 calendarClose.addEventListener('click', closeCalendar);
 function closeCalendar() {
+  if (sidebar) sidebar.hidden = false;
   hideScreen(calendarView);
   showScreen(assistantPanel);
   calendarToggle.setAttribute('aria-expanded', 'false');
+  void loadSidebar();
 }
 document.querySelector('.js-month-prev').addEventListener('click', () => {
   visibleMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1);
@@ -813,6 +1100,14 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+// ===== Инициализация =====
 loadMonthEvents();
 initializeAudioSettings();
-
+void (async () => {
+  await loadAppSettings();
+  await loadSidebar();
+  window.setInterval(tickCountdowns, 1000);
+  // Раз в 5 минут пересобираем списки: напоминания могут «въезжать» в окно,
+  // задачи — добавляться из фонового wake-word-канала.
+  sidebarRefreshHandle = window.setInterval(() => { void loadSidebar(); }, 5 * 60 * 1000);
+})();
