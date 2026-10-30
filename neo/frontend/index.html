@@ -35,7 +35,7 @@
           <header class="sidebar-block-header">
             <h2 id="tasks-heading">Задачи</h2>
             <button class="sidebar-filter js-tasks-toggle-completed" type="button"
-              aria-pressed="true" title="Показывать выполненные задачи">Выполненные</button>
+              aria-pressed="false" title="Показать выполненные задачи">Выполненные</button>
           </header>
           <div class="sidebar-list js-tasks-list" aria-live="polite">
             <p class="sidebar-empty">Загрузка…</p>
@@ -77,6 +77,7 @@
             <h1 class="js-calendar-heading"></h1>
           </div>
           <div class="calendar-controls">
+            <button class="top-action top-action-accent js-event-create" type="button">Добавить событие</button>
             <button class="month-nav js-month-prev" type="button" aria-label="Предыдущий месяц">‹</button>
             <button class="month-nav js-month-next" type="button" aria-label="Следующий месяц">›</button>
             <button class="top-action js-calendar-close" type="button">На главную</button>
@@ -90,8 +91,13 @@
             <div class="js-calendar-grid calendar-grid" role="grid" aria-label="Дни месяца"></div>
           </section>
           <section class="day-details" aria-labelledby="selected-day-heading">
-            <h2 class="js-selected-day-heading" id="selected-day-heading"></h2>
-            <p class="calendar-summary js-events-count"></p>
+            <div class="day-details-header">
+              <div>
+                <h2 class="js-selected-day-heading" id="selected-day-heading"></h2>
+                <p class="calendar-summary js-events-count"></p>
+              </div>
+              <button class="top-action js-day-add" type="button" aria-label="Добавить событие в выбранный день">+ Событие</button>
+            </div>
             <div class="js-events-list event-list" aria-live="polite"></div>
           </section>
         </div>
@@ -101,7 +107,7 @@
     <div class="event-editor-overlay js-event-editor-overlay" hidden>
       <section class="event-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="event-editor-title">
         <header class="settings-header">
-          <div><span class="eyebrow">КАЛЕНДАРЬ</span><h2 id="event-editor-title">Изменить событие</h2></div>
+          <div><span class="eyebrow">КАЛЕНДАРЬ</span><h2 class="js-event-editor-title" id="event-editor-title">Изменить событие</h2></div>
           <button class="icon-button js-event-editor-close" type="button" aria-label="Закрыть редактор">×</button>
         </header>
         <form class="event-editor-form js-event-editor-form">

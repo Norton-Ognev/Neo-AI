@@ -18,10 +18,19 @@ class EventCreate(BaseModel):
             raise ValueError("Текст события не должен быть пустым")
         return value
 
-
 class EventUpdate(EventCreate):
     """Заполняет редактируемые поля для существующего события."""
 
+class EventCompletionUpdate(BaseModel):
+    """Точечное изменение статуса: выполнено / вернуть в работу.
+
+    Отдельная схема, чтобы не гонять полный payload события через PUT
+    ради одной галочки (и не потерять поля при гонках между клиентами).
+    """
+
+    is_completed: bool = Field(
+        description="Отметить событие выполненным (true) или вернуть в работу (false)"
+    )
 
 class EventRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)

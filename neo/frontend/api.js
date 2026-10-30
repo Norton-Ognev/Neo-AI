@@ -61,11 +61,27 @@ export function updateSettings(payload) {
   });
 }
 
+export function createEvent(event) {
+  return request('/api/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(event),
+  });
+}
+
 export function updateEvent(eventId, event) {
   return request(`/api/events/${eventId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(event),
+  });
+}
+
+export function setEventCompleted(eventId, isCompleted) {
+  return request(`/api/events/${eventId}/completion`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_completed: Boolean(isCompleted) }),
   });
 }
 

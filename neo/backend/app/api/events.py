@@ -2,7 +2,12 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, Response
 
-from ..schemas.event import EventCreate, EventRead, EventUpdate
+from ..schemas.event import (
+    EventCompletionUpdate,
+    EventCreate,
+    EventRead,
+    EventUpdate,
+)
 from ..services.event_service import EventService
 from ..services.settings_service import get_settings
 
@@ -21,6 +26,19 @@ def update_event(event_id: int, event: EventUpdate) -> dict:
         updated = EventService.update(event_id, event)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+    return updated
+
+@router.patch("/{event_id}/completion", response_model=EventRead)
+def set_event_completion(event_id: int, payload: EventCompletionUpdate) -> dict:
+    """Отметить событие выполненным или вернуть его в работу.
+
+    Отдельный роут, чтобы галочка в UI не перезаписывала название, тип и время
+    события полным payload'ом PUT — иначе параллельное редактирование затрёт
+    чужие изменения.
+    """
+    updated = EventService.set_completed(event_id, payload.is_completed)
     if updated is None:
         raise HTTPException(status_code=404, detail="Событие не найдено")
     return updated

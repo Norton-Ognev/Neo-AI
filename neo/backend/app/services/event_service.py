@@ -12,7 +12,6 @@ _SEARCH_STOPWORDS = {
     "меня", "мне", "есть", "будет", "ли", "бы",
 }
 
-
 def _search_stem(term: str) -> str:
     """Грубая «основа» слова, чтобы «встречу с Димой» находила «встреча с Димой»,
     а «прогулку» — «прогулка». Предлоги выкидываем: они только мешают."""
@@ -26,7 +25,6 @@ def _search_stem(term: str) -> str:
     if len(word) == 4:
         return word[:-1]
     return word
-
 
 def _serialize_event(row: sqlite3.Row) -> dict:
     return {
@@ -65,6 +63,21 @@ class EventService:
                    SET event_type = ?, content = ?, datetime_iso = ?
                    WHERE id = ?""",
                 (event.event_type, event.content.strip(), datetime_iso, event_id),
+            )
+            if cursor.rowcount == 0:
+                return None
+            row = connection.execute(
+                "SELECT * FROM events WHERE id = ?", (event_id,)
+            ).fetchone()
+            return _serialize_event(row)
+
+    @staticmethod
+    def set_completed(event_id: int, is_completed: bool) -> dict | None:
+        """Переключает только флаг выполнения, не трогая остальные поля события."""
+        with get_connection() as connection:
+            cursor = connection.execute(
+                "UPDATE events SET is_completed = ? WHERE id = ?",
+                (1 if is_completed else 0, event_id),
             )
             if cursor.rowcount == 0:
                 return None

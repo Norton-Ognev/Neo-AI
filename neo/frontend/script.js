@@ -1,5 +1,6 @@
 import {
   cancelRequest,
+  createEvent,
   deleteEvent,
   getEvents,
   getSettings,
@@ -8,6 +9,7 @@ import {
   getVoiceStatus,
   sendText,
   sendVoice,
+  setEventCompleted,
   stopSpeech,
   updateEvent,
   updateSettings,
@@ -31,12 +33,16 @@ const eventsList = document.querySelector('.js-events-list');
 const eventsCount = document.querySelector('.js-events-count');
 const eventEditorOverlay = document.querySelector('.js-event-editor-overlay');
 const eventEditorForm = document.querySelector('.js-event-editor-form');
+const editorTitleEl = document.querySelector('.js-event-editor-title');
 const editorContent = document.querySelector('.js-editor-content');
 const editorDateTime = document.querySelector('.js-editor-datetime');
 const editorType = document.querySelector('.js-editor-type');
 const editorFeedback = document.querySelector('.js-editor-feedback');
+const eventDeleteButton = document.querySelector('.js-event-delete');
 const deleteConfirmPanel = document.querySelector('.js-delete-confirm');
 const deleteFeedback = document.querySelector('.js-delete-feedback');
+const eventCreateButton = document.querySelector('.js-event-create');
+const dayAddButton = document.querySelector('.js-day-add');
 const settingsOverlay = document.querySelector('.js-settings-overlay');
 const settingsFeedback = document.querySelector('.js-settings-feedback');
 const inputDeviceSelect = document.querySelector('.js-input-device');
@@ -77,7 +83,7 @@ let lastWakeResponse = null;
 let appSettings = { reminder_days_ahead: 3 };
 let upcomingReminders = [];
 let allTasks = [];
-let showCompletedTasks = true;
+let showCompletedTasks = false;
 let sidebarRefreshHandle = null;
 
 function setStatus(message, busy = false) {
@@ -214,9 +220,28 @@ function renderTasks() {
     if (item.is_completed) row.classList.add('is-completed');
     row.dataset.taskId = String(item.id);
 
+    const main = document.createElement('div');
+    main.className = 'sidebar-item-main';
+
+    const check = document.createElement('button');
+    check.type = 'button';
+    check.className = 'task-checkbox';
+    check.setAttribute('role', 'checkbox');
+    check.setAttribute('aria-checked', String(Boolean(item.is_completed)));
+    check.setAttribute(
+      'aria-label',
+      item.is_completed
+        ? `Вернуть задачу «${item.content}» в работу`
+        : `Отметить задачу «${item.content}» выполненной`,
+    );
+    check.title = item.is_completed ? 'Вернуть в работу' : 'Отметить выполненной';
+    check.addEventListener('click', () => toggleTaskCompleted(item, check));
+
     const content = document.createElement('div');
     content.className = 'sidebar-item-content';
     content.textContent = item.content;
+
+    main.append(check, content);
 
     const meta = document.createElement('div');
     meta.className = 'sidebar-item-meta';
@@ -244,8 +269,29 @@ function renderTasks() {
     }
 
     meta.append(when, timer);
-    row.append(content, meta);
+    row.append(main, meta);
     tasksList.append(row);
+  }
+}
+
+async function toggleTaskCompleted(item, button) {
+  if (button.disabled) return;
+  const next = !item.is_completed;
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  try {
+    const updated = await setEventCompleted(item.id, next);
+    Object.assign(item, updated);
+    renderTasks();
+    if (!calendarView.hidden) {
+      const idx = monthEvents.findIndex((e) => e.id === item.id);
+      if (idx !== -1) monthEvents[idx] = { ...monthEvents[idx], ...updated };
+      renderSelectedDay();
+    }
+  } catch (error) {
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    setStatus(error.message || 'Не удалось изменить статус задачи');
   }
 }
 
@@ -711,6 +757,9 @@ if (tasksToggleCompleted) {
   tasksToggleCompleted.addEventListener('click', () => {
     showCompletedTasks = !showCompletedTasks;
     tasksToggleCompleted.setAttribute('aria-pressed', String(showCompletedTasks));
+    tasksToggleCompleted.title = showCompletedTasks
+      ? 'Скрыть выполненные задачи'
+      : 'Показать выполненные задачи';
     renderTasks();
   });
 }
@@ -793,10 +842,19 @@ function renderCalendarGrid() {
   const month = visibleMonth.getMonth();
   const leadingDays = (new Date(year, month, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // Считаем события по типам отдельно — на каждый тип будет свой кружок.
   const eventCounts = new Map();
   for (const event of monthEvents) {
     const key = eventDateKey(event);
-    if (key) eventCounts.set(key, (eventCounts.get(key) || 0) + 1);
+    if (!key) continue;
+    let bucket = eventCounts.get(key);
+    if (!bucket) {
+      bucket = { meeting: 0, task: 0, reminder: 0 };
+      eventCounts.set(key, bucket);
+    }
+    if (event.event_type === 'meeting') bucket.meeting += 1;
+    else if (event.event_type === 'task') bucket.task += 1;
+    else if (event.event_type === 'reminder') bucket.reminder += 1;
   }
   const todayKey = dateKey(new Date());
   calendarGrid.replaceChildren();
@@ -812,27 +870,54 @@ function renderCalendarGrid() {
     }
     const day = new Date(year, month, dayNumber);
     const key = dateKey(day);
-    const count = eventCounts.get(key) || 0;
+    const bucket = eventCounts.get(key);
+    const total = bucket ? bucket.meeting + bucket.task + bucket.reminder : 0;
     const cellButton = document.createElement('button');
     cellButton.type = 'button';
     cellButton.className = 'calendar-day';
     cellButton.style.setProperty('--cell-index', String(cell));
     cellButton.setAttribute('role', 'gridcell');
     cellButton.setAttribute('aria-selected', String(key === dateKey(selectedDate)));
-    cellButton.setAttribute('aria-label', `${day.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}${count ? `, событий: ${count}` : ''}${key === todayKey ? ', сегодня' : ''}`);
+
+    const labelParts = [];
+    if (bucket?.meeting) labelParts.push(`встреч: ${bucket.meeting}`);
+    if (bucket?.task) labelParts.push(`задач: ${bucket.task}`);
+    if (bucket?.reminder) labelParts.push(`напоминаний: ${bucket.reminder}`);
+    const countText = labelParts.length ? `, ${labelParts.join(', ')}` : '';
+    const todayText = key === todayKey ? ', сегодня' : '';
+    cellButton.setAttribute(
+      'aria-label',
+      `${day.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}${countText}${todayText}`,
+    );
+
     if (key === todayKey) cellButton.classList.add('is-today');
     if (key === dateKey(selectedDate)) cellButton.classList.add('is-selected');
-    if (count) cellButton.classList.add('has-events');
+    if (total) cellButton.classList.add('has-events');
     const number = document.createElement('span');
     number.className = 'day-number';
     number.textContent = String(dayNumber);
     cellButton.append(number);
-    if (count) {
-      const marker = document.createElement('span');
-      marker.className = 'day-event-count';
-      marker.textContent = String(count);
-      cellButton.append(marker);
+
+    if (total) {
+      const markers = document.createElement('span');
+      markers.className = 'day-markers';
+      markers.setAttribute('aria-hidden', 'true');
+      const order = [
+        ['meeting', 'is-meeting'],
+        ['task', 'is-task'],
+        ['reminder', 'is-reminder'],
+      ];
+      for (const [type, cls] of order) {
+        const count = bucket[type];
+        if (!count) continue;
+        const marker = document.createElement('span');
+        marker.className = `day-marker ${cls}`;
+        marker.textContent = String(count);
+        markers.append(marker);
+      }
+      cellButton.append(markers);
     }
+
     cellButton.addEventListener('click', () => {
       calendarGrid.querySelector('.calendar-day.is-selected')?.classList.remove('is-selected');
       calendarGrid.querySelector('.calendar-day[aria-selected="true"]')?.setAttribute('aria-selected', 'false');
@@ -861,6 +946,7 @@ function renderSelectedDay() {
   dayEvents.forEach((item, index) => {
     const row = document.createElement('article');
     row.className = `event-row event-${item.event_type}`;
+    if (item.is_completed) row.classList.add('is-completed');
     row.style.setProperty('--row-index', String(index));
     const when = document.createElement('time');
     when.textContent = item.datetime_iso
@@ -888,12 +974,45 @@ function toLocalDateTimeInput(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// Выбирает дефолтный datetime для нового события:
+// если выбран сегодняшний день — ближайшие :00/:30 после текущего момента,
+// иначе 09:00 выбранного дня (это работает и для прошедших дат).
+function defaultEventDatetime() {
+  const now = new Date();
+  const target = new Date(selectedDate);
+  const isToday = dateKey(target) === dateKey(now);
+  if (isToday) {
+    const totalMin = now.getHours() * 60 + now.getMinutes();
+    const rounded = Math.floor(totalMin / 30) * 30 + 30;
+    if (rounded >= 24 * 60) {
+      target.setDate(target.getDate() + 1);
+      target.setHours(9, 0, 0, 0);
+    } else {
+      target.setHours(Math.floor(rounded / 60), rounded % 60, 0, 0);
+    }
+  } else {
+    target.setHours(9, 0, 0, 0);
+  }
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())}T${pad(target.getHours())}:${pad(target.getMinutes())}`;
+}
+
 function openEventEditor(event, trigger) {
-  editingEvent = event;
-  eventEditTrigger = trigger;
-  editorContent.value = event.content;
-  editorDateTime.value = toLocalDateTimeInput(event.datetime_iso);
-  editorType.value = event.event_type;
+  editingEvent = event || null;
+  eventEditTrigger = trigger || null;
+  if (event) {
+    editorTitleEl.textContent = 'Изменить событие';
+    editorContent.value = event.content;
+    editorDateTime.value = toLocalDateTimeInput(event.datetime_iso);
+    editorType.value = event.event_type;
+    eventDeleteButton.hidden = false;
+  } else {
+    editorTitleEl.textContent = 'Новое событие';
+    editorContent.value = '';
+    editorDateTime.value = defaultEventDatetime();
+    editorType.value = 'task';
+    eventDeleteButton.hidden = true;
+  }
   editorFeedback.textContent = '';
   deleteFeedback.textContent = '';
   eventEditorForm.hidden = false;
@@ -913,27 +1032,37 @@ function closeEventEditor(restoreFocus = true) {
 
 eventEditorForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (!editingEvent) return;
+  const isCreating = !editingEvent;
   const saveButton = document.querySelector('.js-event-editor-save');
+  const contentValue = editorContent.value.trim();
+  if (!contentValue) {
+    editorFeedback.textContent = 'Введите название события.';
+    editorContent.focus();
+    return;
+  }
   saveButton.disabled = true;
   editorFeedback.textContent = 'Сохраняю…';
   const newDateTime = editorDateTime.value ? new Date(editorDateTime.value) : null;
   const payload = {
-    content: editorContent.value.trim(),
+    content: contentValue,
     event_type: editorType.value,
     datetime_iso: newDateTime ? newDateTime.toISOString() : null,
   };
   try {
-    await updateEvent(editingEvent.id, payload);
+    if (isCreating) {
+      await createEvent(payload);
+    } else {
+      await updateEvent(editingEvent.id, payload);
+    }
     if (newDateTime) {
       visibleMonth = new Date(newDateTime.getFullYear(), newDateTime.getMonth(), 1);
       selectedDate = new Date(newDateTime.getFullYear(), newDateTime.getMonth(), newDateTime.getDate());
     }
-    setStatus('Изменения сохранены');
-    closeEventEditor(false);
+    setStatus(isCreating ? 'Событие добавлено' : 'Изменения сохранены');
+    closeEventEditor(isCreating);
     await loadMonthEvents();
     void loadSidebar();
-    calendarClose.focus();
+    if (!isCreating) calendarClose.focus();
   } catch (error) {
     editorFeedback.textContent = error.message || 'Не удалось сохранить изменения.';
   } finally {
@@ -977,6 +1106,14 @@ document.querySelector('.js-delete-confirm-button').addEventListener('click', as
     button.disabled = false;
   }
 });
+
+// Открытие диалога создания события — из шапки календаря и из блока выбранного дня.
+if (eventCreateButton) {
+  eventCreateButton.addEventListener('click', () => openEventEditor(null, eventCreateButton));
+}
+if (dayAddButton) {
+  dayAddButton.addEventListener('click', () => openEventEditor(null, dayAddButton));
+}
 
 const calendarToggle = document.querySelector('.js-calendar-toggle');
 const calendarClose = document.querySelector('.js-calendar-close');
