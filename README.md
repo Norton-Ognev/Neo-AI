@@ -115,6 +115,11 @@ python -m venv .venv
 ```
 
 Готовое приложение появится в `dist/NeoAI/`. Сборка инсталлятора — Inno Setup, скрипт лежит в `neo/installer/neo.iss`.
+```
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+  "/DMyAppVersion=1.1.0" `
+  ".\installer\neo.iss"
+```
 
 ---
 ## Первый запуск
