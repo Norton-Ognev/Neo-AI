@@ -111,35 +111,7 @@ python -m venv .venv
 **Сборка `.exe` через PyInstaller:**
 
 ```
-
-Remove-Item -Recurse -Force .\build, .\dist -ErrorAction SilentlyContinue
-
-Remove-Item -Force .\NeoAI.spec -ErrorAction SilentlyContinue
-
-  
-
-.\.venv\Scripts\python -m PyInstaller --noconfirm --clean --onedir --windowed --name NeoAI `
-
-  --add-data "neo/frontend;neo/frontend" `
-
-  --add-data "neo/ai/prompts;neo/ai/prompts" `
-
-  --collect-submodules neo --collect-submodules uvicorn `
-
-  --collect-all faster_whisper --collect-all ctranslate2 --collect-all av `
-
-  --collect-all vosk --collect-all webview --collect-all sounddevice `
-
-  --collect-submodules omegaconf --collect-data omegaconf --copy-metadata omegaconf `
-
-  --hidden-import omegaconf --hidden-import omegaconf.errors --hidden-import omegaconf.nodes `
-
-  --hidden-import win32com.client `
-
-  --runtime-hook runtime_hook_arch.py `
-
-  run_neo.py
-
+.\.venv\Scripts\python -m PyInstaller --noconfirm --clean --onedir --windowed --name NeoAI --add-data "neo/frontend;neo/frontend" --add-data "neo/ai/prompts;neo/ai/prompts" --collect-submodules neo --collect-submodules uvicorn --collect-all faster_whisper --collect-all ctranslate2 --collect-all av --collect-all vosk --collect-all webview --collect-all sounddevice --collect-submodules omegaconf --collect-data omegaconf --copy-metadata omegaconf --hidden-import omegaconf --hidden-import omegaconf.errors --hidden-import omegaconf.nodes --hidden-import win32com.client --runtime-hook runtime_hook_arch.py run_neo.py
 ```
 
 Готовое приложение появится в `dist/NeoAI/`. Сборка инсталлятора — Inno Setup, скрипт лежит в `neo/installer/neo.iss`.
